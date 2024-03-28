@@ -73,7 +73,7 @@ pub struct InitHCAOutput {
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big", magic = b"\x01\x04\0\0\0\0\0\0\0\0\0\0\0\0\0\0")]
-pub struct EnableHCA(());
+pub struct EnableHCA(pub ());
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
@@ -87,7 +87,7 @@ pub struct EnableHCAOutput {
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big", magic = b"\x01\x05\0\0\0\0\0\0\0\0\0\0\0\0\0\0")]
-pub struct DisableHCA(());
+pub struct DisableHCA(pub ());
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
@@ -101,7 +101,7 @@ pub struct DisableHCAOutput {
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big", magic = b"\x01\x0a\0\0\0\0\0\0\0\0\0\0\0\0\0\0")]
-pub struct QueryISSI(());
+pub struct QueryISSI(pub ());
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
@@ -120,7 +120,7 @@ pub struct QueryISSIOutput {
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big", magic = b"\x01\x01\0\0\0\0\0\0\0\0\0\0\0\0\0\0")]
-pub struct QueryAdapter(());
+pub struct QueryAdapter(pub ());
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]

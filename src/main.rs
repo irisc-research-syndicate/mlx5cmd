@@ -19,7 +19,7 @@ use pci_driver::{
 
 use crate::{
     error::{Error, Result},
-    types::QueryPages,
+    types::{EnableHCA, QueryISSI, QueryISSIOutput, QueryPages, QueryPagesOutput},
 };
 
 mod error;
@@ -249,23 +249,10 @@ fn main() -> Result<()> {
     let pci_device = VfioPciDevice::open("/sys/bus/pci/devices/0000:04:00.0")?;
     pci_device.reset()?;
     let cmdif = Mlx5CmdIf::new(pci_device)?;
-    // ENABLE_HCA
-    cmdif.exec_command(
-        &[
-            0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ],
-        0x10,
-    )?;
-    // QUERY_ISSI
-    let out = cmdif.exec_command(
-        &[
-            0x01, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ],
-        0x70,
-    )?;
-    dbg_hex!(out);
+    cmdif.exec_command(&EnableHCA(()).to_bytes()?, 0x10)?;
+    let out = cmdif.exec_command(&QueryISSI(()).to_bytes()?, 0x70)?;
+    let out = QueryISSIOutput::try_from(out.as_slice()).unwrap();
+    dbg!(out);
     // SET_ISSI
     let out = cmdif.exec_command(
         &[
@@ -283,7 +270,8 @@ fn main() -> Result<()> {
         .to_bytes()?,
         0x10,
     )?;
-    dbg_hex!(out);
+    let out = QueryPagesOutput::try_from(out.as_slice()).unwrap();
+    dbg!(out);
     // MANAGE_PAGES(1) 6 pages: 0x10010000 - 0x10015000
     let mut manage_pages_msg = vec![
         0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
