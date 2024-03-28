@@ -1,14 +1,23 @@
-#![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
+use std::thread::sleep;
+use std::time::Duration;
 
-use pci_driver::backends::vfio::VfioPciDevice;
-use pci_driver::regions::{AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, Permissions};
-use pci_driver::{device::PciDevice, regions::{structured::{PciRegisterRo, PciRegisterRw}, PciRegion}};
 use dbg_hex::dbg_hex;
+use pci_driver::backends::vfio::VfioPciDevice;
+use pci_driver::regions::{
+    AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, Permissions,
+};
+use pci_driver::{
+    device::PciDevice,
+    regions::{
+        structured::{PciRegisterRo, PciRegisterRw},
+        PciRegion,
+    },
+};
 
 mod error;
 
@@ -62,7 +71,9 @@ impl<'a> CQE<'a> {
         let mut cmd_data = vec![0u8; self.len() as usize];
         self.read_bytes(0, &mut cmd_data)?;
         let mut signature = 0xffu8;
-        for x in cmd_data { signature ^= x; }
+        for x in cmd_data {
+            signature ^= x;
+        }
         self.signature().write(signature)?;
         Ok(())
     }
@@ -79,27 +90,43 @@ pci_struct! {
     }
 }
 
-pub fn iommu_map(iommu: &pci_driver::iommu::PciIommu, iova: u64, length: usize) -> Result<PciMemoryRegion<'static>> {
+pub fn iommu_map(
+    iommu: &pci_driver::iommu::PciIommu,
+    iova: u64,
+    length: usize,
+) -> Result<PciMemoryRegion<'static>> {
     unsafe {
-        let memory = libc::mmap(null_mut(), length, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_ANONYMOUS | libc::MAP_PRIVATE, -1, 0) as *mut u8;
+        let memory = libc::mmap(
+            null_mut(),
+            length,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_ANONYMOUS | libc::MAP_PRIVATE,
+            -1,
+            0,
+        ) as *mut u8;
         iommu.map(iova, length, memory, Permissions::ReadWrite)?;
-        Ok(PciMemoryRegion::new_raw(memory, length, Permissions::ReadWrite))
+        Ok(PciMemoryRegion::new_raw(
+            memory,
+            length,
+            Permissions::ReadWrite,
+        ))
     }
 }
 
-const QUERY_HCA_CAP : u32 = 0x01000000_u32;
-const QUERY_ADAPTER : u32 = 0x01010000_u32;
-const INIT_HCA : u32 = 0x01020000_u32;
-const TEARDOWN_HCA : u32 = 0x01030000_u32;
-const ENABLE_HCA : u32 = 0x01040000_u32;
-const DISABLE_HCA : u32 = 0x01050000_u32;
-const QUERY_PAGES : u32 = 0x01070000_u32;
-const MANAGE_PAGES : u32 = 0x01080000_u32;
-const SET_HCA_CAP : u32 = 0x01090000_u32;
-const QUERY_ISSI : u32 = 0x010a0000_u32;
-const QUERY_FLOW_TABLE: u32 = 0x09320000_u32;
-const EXEC_SHELLCODE: u32 = 0x09320000_u32;
+pub const QUERY_HCA_CAP: u32 = 0x01000000_u32;
+pub const QUERY_ADAPTER: u32 = 0x01010000_u32;
+pub const INIT_HCA: u32 = 0x01020000_u32;
+pub const TEARDOWN_HCA: u32 = 0x01030000_u32;
+pub const ENABLE_HCA: u32 = 0x01040000_u32;
+pub const DISABLE_HCA: u32 = 0x01050000_u32;
+pub const QUERY_PAGES: u32 = 0x01070000_u32;
+pub const MANAGE_PAGES: u32 = 0x01080000_u32;
+pub const SET_HCA_CAP: u32 = 0x01090000_u32;
+pub const QUERY_ISSI: u32 = 0x010a0000_u32;
+pub const QUERY_FLOW_TABLE: u32 = 0x09320000_u32;
+pub const EXEC_SHELLCODE: u32 = 0x09320000_u32;
 
+#[allow(dead_code)]
 struct Mlx5CmdIf<'a> {
     pci_device: VfioPciDevice,
     bar0_region: MappedOwningPciRegion,
@@ -108,12 +135,20 @@ struct Mlx5CmdIf<'a> {
 
 impl<'a> Mlx5CmdIf<'a> {
     pub fn new(pci_device: VfioPciDevice) -> Result<Self> {
-        pci_device.config().command().bus_master_enable().write(true)?;
+        pci_device
+            .config()
+            .command()
+            .bus_master_enable()
+            .write(true)?;
         let bar0 = pci_device.bar(0).ok_or(Error::Bar0Error)?;
         let bar0_region = bar0.map(..bar0.len(), Permissions::ReadWrite)?;
         let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, 0x100000)?;
-        
-        let this = Self { pci_device, bar0_region, dma_region };
+
+        let this = Self {
+            pci_device,
+            bar0_region,
+            dma_region,
+        };
         this.setup_cmdq_phy_addr(0x10000000_u64)?;
 
         Ok(this)
@@ -123,13 +158,17 @@ impl<'a> Mlx5CmdIf<'a> {
         InitSegment::backed_by(&self.bar0_region)
     }
 
-    pub fn setup_cmdq_phy_addr(&self, cmdq_phy_addr:u64) -> Result<()> {
-        self.init_segment().cmdq_phy_addr_hi().write(((cmdq_phy_addr >> 32) as u32) .to_be())?;
-        self.init_segment().cmdq_phy_addr_lo().write(((cmdq_phy_addr & 0xffffffff) as u32).to_be())?;
+    pub fn setup_cmdq_phy_addr(&self, cmdq_phy_addr: u64) -> Result<()> {
+        self.init_segment()
+            .cmdq_phy_addr_hi()
+            .write(((cmdq_phy_addr >> 32) as u32).to_be())?;
+        self.init_segment()
+            .cmdq_phy_addr_lo()
+            .write(((cmdq_phy_addr & 0xffffffff) as u32).to_be())?;
 
         while self.init_segment().initializing().read()?.to_be() & 0x80000000 != 0x00000000 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        };
+            sleep(Duration::from_millis(100));
+        }
 
         Ok(())
     }
@@ -150,11 +189,11 @@ impl<'a> Mlx5CmdIf<'a> {
         cmd.output_mb_ptr_lo().write(0x10000800_u32.to_be())?;
 
         for (i, b) in input[..0x10].iter().enumerate() {
-            cmd.write_u8(0x10 + i as u64, *b);
+            cmd.write_u8(0x10 + i as u64, *b)?;
         }
 
         for (i, b) in input[0x10..].iter().enumerate() {
-            in_mb.write_u8(i as u64, *b);
+            in_mb.write_u8(i as u64, *b)?;
         }
 
         cmd.cmd_output_inline0().write(0x12345678_u32.to_be())?;
@@ -166,16 +205,18 @@ impl<'a> Mlx5CmdIf<'a> {
         cmd.status().write(0x01)?;
         cmd.update_signature()?;
 
-        self.init_segment().cmdq_doorbell().write(0x00000001_u32.to_be())?;
+        self.init_segment()
+            .cmdq_doorbell()
+            .write(0x00000001_u32.to_be())?;
 
         while cmd.status().read()? & 0x01 != 0x00 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            sleep(Duration::from_millis(100));
         }
         dbg!(&cmd);
 
         let mut output = vec![];
         for i in 0x00..0x10 {
-            output.push(cmd.read_u8(0x20+i)?)
+            output.push(cmd.read_u8(0x20 + i)?)
         }
 
         for i in 0x10..outlen {
@@ -183,7 +224,6 @@ impl<'a> Mlx5CmdIf<'a> {
         }
 
         Ok(output)
-
     }
 }
 
@@ -191,18 +231,21 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 struct CliArgs {
     device: PathBuf,
-    input: Vec<u8>
+    input: Vec<u8>,
 }
 
-
 fn main() -> Result<()> {
-    let pci_device = pci_driver::backends::vfio::VfioPciDevice::open("/sys/bus/pci/devices/0000:04:00.0")?;
+    let pci_device = VfioPciDevice::open("/sys/bus/pci/devices/0000:04:00.0")?;
     pci_device.reset()?;
     let cmdif = Mlx5CmdIf::new(pci_device)?;
-    let output = cmdif.exec_command(&[0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], 0x10)?;
+    let output = cmdif.exec_command(
+        &[
+            0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ],
+        0x10,
+    )?;
     dbg!(output);
-
-
 
     Ok(())
 }
