@@ -129,7 +129,7 @@ impl<'a> Mlx5CmdIf<'a> {
             .write(true)?;
         let bar0 = pci_device.bar(0).ok_or(Error::Bar0Error)?;
         let bar0_region = bar0.map(..bar0.len(), Permissions::ReadWrite)?;
-        let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, 0x100000)?;
+        let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, 0x8000000)?;
 
         let this = Self {
             pci_device,
