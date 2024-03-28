@@ -6,24 +6,22 @@ use std::ptr::null_mut;
 use std::thread::sleep;
 use std::time::Duration;
 
+use clap::Parser;
 use dbg_hex::dbg_hex;
-use pci_driver::backends::vfio::VfioPciDevice;
-use pci_driver::regions::{
-    AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, Permissions,
-};
 use pci_driver::{
+    backends::vfio::VfioPciDevice,
     device::PciDevice,
+    pci_struct,
     regions::{
         structured::{PciRegisterRo, PciRegisterRw},
-        PciRegion,
+        AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, PciRegion,
+        Permissions,
     },
 };
 
-mod error;
-
 use error::{Error, Result};
 
-use pci_driver::pci_struct;
+mod error;
 
 pci_struct! {
     pub struct InitSegment<'a> : 0x1000 {
@@ -174,6 +172,7 @@ impl<'a> Mlx5CmdIf<'a> {
     }
 
     pub fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
+        log::info!("Executing command input={input:02x?} outlen={outlen}");
         let cmd = CQE::backed_by((&self.dma_region).subregion(0x000..0x400));
         let in_mb = Mailbox::backed_by((&self.dma_region).subregion(0x400..0x800));
         let out_mb = Mailbox::backed_by((&self.dma_region).subregion(0x800..0xc00));
@@ -210,9 +209,10 @@ impl<'a> Mlx5CmdIf<'a> {
             .write(0x00000001_u32.to_be())?;
 
         while cmd.status().read()? & 0x01 != 0x00 {
+            log::trace!("Waiting for command status");
             sleep(Duration::from_millis(100));
         }
-        dbg!(&cmd);
+        log::debug!("Command: {cmd:?}");
 
         let mut output = vec![];
         for i in 0x00..0x10 {
@@ -227,7 +227,6 @@ impl<'a> Mlx5CmdIf<'a> {
     }
 }
 
-use clap::Parser;
 #[derive(Parser, Debug)]
 struct CliArgs {
     device: PathBuf,
@@ -235,6 +234,8 @@ struct CliArgs {
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
+
     let pci_device = VfioPciDevice::open("/sys/bus/pci/devices/0000:04:00.0")?;
     pci_device.reset()?;
     let cmdif = Mlx5CmdIf::new(pci_device)?;
