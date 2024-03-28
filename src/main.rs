@@ -278,7 +278,7 @@ fn main() -> Result<()> {
 
     let out = cmdif.exec_command(
         &QueryPages {
-            op_mod: types::OpMod::BootPages,
+            op_mod: types::QueryPagesOpMod::BootPages,
         }
         .to_bytes()?,
         0x10,
