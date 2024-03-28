@@ -236,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn test_start_hca() {
+    fn test_enable_hca() {
         let cmd = EnableHCA(());
 
         let res = cmd.to_bytes().unwrap();
