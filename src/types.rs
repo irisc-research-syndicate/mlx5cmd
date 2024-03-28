@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+
 use deku::ctx::Endian;
 use deku::prelude::*;
 
@@ -20,12 +22,12 @@ pub enum QueryPagesOpMod {
 #[deku(endian = "big")]
 pub struct QueryPagesOutput {
     #[deku(pad_bytes_after = "3")]
-    status: u8,
+    pub status: u8,
 
     #[deku(pad_bytes_after = "4")]
-    syndrome: u32,
+    pub syndrome: u32,
 
-    num_pages: u32,
+    pub num_pages: u32,
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -48,8 +50,17 @@ pub enum ManagePagesOpMod {
     HCAReturnPages = 0x2,
 }
 
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big", magic = b"\x01\x0d")]
+pub struct SetDriverVersion {
+    #[deku(pad_bytes_before = "14")]
+    pub driver_version: [u8; 64],
+}
+
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
 
     #[test]
@@ -96,6 +107,31 @@ mod tests {
             &[
                 1, 8, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 18, 52, 86, 120, 0, 0,
                 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255
+            ]
+        );
+    }
+
+    #[test]
+    fn test_set_driver_version() {
+        let mut cmd = SetDriverVersion {
+            driver_version: [0; 64],
+        };
+
+        cmd.driver_version
+            .as_mut_slice()
+            .write(b"test-version\0")
+            .unwrap();
+
+        let res = cmd.to_bytes().unwrap();
+
+        assert_eq!(res.len(), 0x50);
+        assert_eq!(
+            res,
+            &[
+                1, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 101, 115, 116, 45, 118, 101,
+                114, 115, 105, 111, 110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0
             ]
         );
     }
