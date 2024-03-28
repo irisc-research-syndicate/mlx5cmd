@@ -57,6 +57,20 @@ pub struct SetDriverVersion {
     pub driver_version: [u8; 64],
 }
 
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big", magic = b"\x01\x02\0\0\0\0\0\0\0\0\0\0\0\0\0\0")]
+pub struct InitHCA(());
+
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big")]
+pub struct InitHCAOutput {
+    #[deku(pad_bytes_after = "3")]
+    pub status: u8,
+
+    #[deku(pad_bytes_after = "4")]
+    pub syndrome: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -134,5 +148,15 @@ mod tests {
                 0, 0, 0, 0, 0
             ]
         );
+    }
+
+    #[test]
+    fn test_init_hca() {
+        let cmd = InitHCA(());
+
+        let res = cmd.to_bytes().unwrap();
+
+        assert_eq!(res.len(), 0x10);
+        assert_eq!(res, &[0x01, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     }
 }
