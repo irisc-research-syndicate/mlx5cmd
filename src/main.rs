@@ -2,9 +2,11 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 
-use pci_driver::regions::{AsPciSubregion, BackedByPciSubregion, PciMemoryRegion, Permissions};
+use pci_driver::backends::vfio::VfioPciDevice;
+use pci_driver::regions::{AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, Permissions};
 use pci_driver::{device::PciDevice, regions::{structured::{PciRegisterRo, PciRegisterRw}, PciRegion}};
 use dbg_hex::dbg_hex;
 
@@ -77,7 +79,7 @@ pci_struct! {
     }
 }
 
-pub fn iommu_map(iommu: pci_driver::iommu::PciIommu, iova: u64, length: usize) -> Result<PciMemoryRegion> {
+pub fn iommu_map(iommu: &pci_driver::iommu::PciIommu, iova: u64, length: usize) -> Result<PciMemoryRegion<'static>> {
     unsafe {
         let memory = libc::mmap(null_mut(), length, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_ANONYMOUS | libc::MAP_PRIVATE, -1, 0) as *mut u8;
         iommu.map(iova, length, memory, Permissions::ReadWrite)?;
@@ -91,57 +93,116 @@ const INIT_HCA : u32 = 0x01020000_u32;
 const TEARDOWN_HCA : u32 = 0x01030000_u32;
 const ENABLE_HCA : u32 = 0x01040000_u32;
 const DISABLE_HCA : u32 = 0x01050000_u32;
+const QUERY_PAGES : u32 = 0x01070000_u32;
+const MANAGE_PAGES : u32 = 0x01080000_u32;
+const SET_HCA_CAP : u32 = 0x01090000_u32;
+const QUERY_ISSI : u32 = 0x010a0000_u32;
+const QUERY_FLOW_TABLE: u32 = 0x09320000_u32;
+const EXEC_SHELLCODE: u32 = 0x09320000_u32;
+
+struct Mlx5CmdIf<'a> {
+    pci_device: VfioPciDevice,
+    bar0_region: MappedOwningPciRegion,
+    dma_region: PciMemoryRegion<'a>,
+}
+
+impl<'a> Mlx5CmdIf<'a> {
+    pub fn new(pci_device: VfioPciDevice) -> Result<Self> {
+        pci_device.config().command().bus_master_enable().write(true)?;
+        let bar0 = pci_device.bar(0).ok_or(Error::Bar0Error)?;
+        let bar0_region = bar0.map(..bar0.len(), Permissions::ReadWrite)?;
+        let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, 0x100000)?;
+        
+        let this = Self { pci_device, bar0_region, dma_region };
+        this.setup_cmdq_phy_addr(0x10000000_u64)?;
+
+        Ok(this)
+    }
+
+    pub fn init_segment(&self) -> InitSegment {
+        InitSegment::backed_by(&self.bar0_region)
+    }
+
+    pub fn setup_cmdq_phy_addr(&self, cmdq_phy_addr:u64) -> Result<()> {
+        self.init_segment().cmdq_phy_addr_hi().write(((cmdq_phy_addr >> 32) as u32) .to_be())?;
+        self.init_segment().cmdq_phy_addr_lo().write(((cmdq_phy_addr & 0xffffffff) as u32).to_be())?;
+
+        while self.init_segment().initializing().read()?.to_be() & 0x80000000 != 0x00000000 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        };
+
+        Ok(())
+    }
+
+    pub fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
+        let cmd = CQE::backed_by((&self.dma_region).subregion(0x000..0x400));
+        let in_mb = Mailbox::backed_by((&self.dma_region).subregion(0x400..0x800));
+        let out_mb = Mailbox::backed_by((&self.dma_region).subregion(0x800..0xc00));
+
+        cmd.cmd_type().write(0x07)?;
+
+        cmd.input_length().write((input.len() as u32).to_be())?;
+        cmd.input_mb_ptr_hi().write(0x00000000_u32.to_be())?;
+        cmd.input_mb_ptr_lo().write(0x10000400_u32.to_be())?;
+
+        cmd.output_length().write(outlen.to_be())?;
+        cmd.output_mb_ptr_hi().write(0x00000000_u32.to_be())?;
+        cmd.output_mb_ptr_lo().write(0x10000800_u32.to_be())?;
+
+        for (i, b) in input[..0x10].iter().enumerate() {
+            cmd.write_u8(0x10 + i as u64, *b);
+        }
+
+        for (i, b) in input[0x10..].iter().enumerate() {
+            in_mb.write_u8(i as u64, *b);
+        }
+
+        cmd.cmd_output_inline0().write(0x12345678_u32.to_be())?;
+        cmd.cmd_output_inline1().write(0x00000000_u32.to_be())?;
+        cmd.cmd_output_inline2().write(0x00000000_u32.to_be())?;
+        cmd.cmd_output_inline3().write(0x00000000_u32.to_be())?;
+
+        cmd.token().write(0x00)?;
+        cmd.status().write(0x01)?;
+        cmd.update_signature()?;
+
+        self.init_segment().cmdq_doorbell().write(0x00000001_u32.to_be())?;
+
+        while cmd.status().read()? & 0x01 != 0x00 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        dbg!(&cmd);
+
+        let mut output = vec![];
+        for i in 0x00..0x10 {
+            output.push(cmd.read_u8(0x20+i)?)
+        }
+
+        for i in 0x10..outlen {
+            output.push(out_mb.read_u8(i as u64)?);
+        }
+
+        Ok(output)
+
+    }
+}
+
+use clap::Parser;
+#[derive(Parser, Debug)]
+struct CliArgs {
+    device: PathBuf,
+    input: Vec<u8>
+}
+
 
 fn main() -> Result<()> {
     let pci_device = pci_driver::backends::vfio::VfioPciDevice::open("/sys/bus/pci/devices/0000:04:00.0")?;
     pci_device.reset()?;
-    pci_device.config().command().bus_master_enable().write(true)?;
-    let bar0 = pci_device.bar(0).ok_or(Error::Bar0Error)?;
-    let bar0_region = bar0.map(..bar0.len(), Permissions::ReadWrite)?;
-    let dma_region = iommu_map(pci_device.iommu(), 0x10000000_u64, 0x100000)?;
+    let cmdif = Mlx5CmdIf::new(pci_device)?;
+    let output = cmdif.exec_command(&[0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], 0x10)?;
+    dbg!(output);
 
-    let init_segment = InitSegment::backed_by(&bar0_region);
-    dbg!(&init_segment);
-    init_segment.cmdq_phy_addr_lo().write(0x10000000_u32.to_be())?;
-    while init_segment.initializing().read()?.to_be() & 0x80000000 != 0x00000000 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    };
 
-    let in_mb = Mailbox::backed_by((&dma_region).subregion(0x400..0x800));
-    let out_mb = Mailbox::backed_by((&dma_region).subregion(0x800..0xc00));
-
-    let cmd = CQE::backed_by(&dma_region);
-    cmd.cmd_type().write(0x07)?;
-    cmd.input_length().write(0x00000010_u32.to_be())?;
-    cmd.input_mb_ptr_hi().write(0x00000000_u32.to_be())?;
-    cmd.input_mb_ptr_lo().write(0x00000000_u32.to_be())?;
-    cmd.input_mb_ptr_lo().write(0x10000400_u32.to_be())?;
-
-    cmd.cmd_input_inline0().write(ENABLE_HCA.to_be())?;
-    cmd.cmd_input_inline1().write(0x00000000_u32.to_be())?;
-    cmd.cmd_input_inline2().write(0x00000000_u32.to_be())?;
-    cmd.cmd_input_inline3().write(0x00000000_u32.to_be())?;
-
-    cmd.cmd_output_inline0().write(0x00000000_u32.to_be())?;
-    cmd.cmd_output_inline1().write(0x00000000_u32.to_be())?;
-    cmd.cmd_output_inline2().write(0x00000000_u32.to_be())?;
-    cmd.cmd_output_inline3().write(0x00000000_u32.to_be())?;
-
-    cmd.output_length().write(0x00000010_u32.to_be())?;
-    cmd.output_mb_ptr_hi().write(0x00000000_u32.to_be())?;
-    cmd.output_mb_ptr_lo().write(0x10000800_u32.to_be())?;
-
-    cmd.token().write(0x00)?;
-    cmd.status().write(0x01)?;
-    cmd.update_signature()?;
-
-    init_segment.cmdq_doorbell().write(0x00000001_u32.to_be())?;
-
-    while cmd.status().read()? & 0x01 != 0x00 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    dbg!(&cmd);
-//    dbg!(&init_segment);
 
     Ok(())
 }
