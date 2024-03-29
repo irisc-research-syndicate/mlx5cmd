@@ -8,6 +8,9 @@ pub enum Error {
     #[error("Bar0 not found")]
     Bar0Error,
 
+    #[error("Cmdif {0}")]
+    CmdIf(u8),
+
     #[error("Could not serialize command")]
     DekuError(#[from] deku::error::DekuError),
 }

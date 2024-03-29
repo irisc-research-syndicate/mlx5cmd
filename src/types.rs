@@ -3,6 +3,12 @@ use std::ffi::CStr;
 use deku::ctx::Endian;
 use deku::prelude::*;
 
+pub trait Command: DekuContainerWrite {
+    type Output: for<'a> DekuContainerRead<'a>;
+
+    fn outlen(&self) -> usize;
+}
+
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big", magic = b"\x01\x07")]
 pub struct QueryPages {
@@ -28,6 +34,14 @@ pub struct QueryPagesOutput {
     pub syndrome: u32,
 
     pub num_pages: u32,
+}
+
+impl Command for QueryPages {
+    type Output = QueryPagesOutput;
+
+    fn outlen(&self) -> usize {
+        0x10
+    }
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -59,7 +73,7 @@ pub struct SetDriverVersion {
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big", magic = b"\x01\x02\0\0\0\0\0\0\0\0\0\0\0\0\0\0")]
-pub struct InitHCA(());
+pub struct InitHCA(pub ());
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
@@ -69,6 +83,13 @@ pub struct InitHCAOutput {
 
     #[deku(pad_bytes_after = "4")]
     pub syndrome: u32,
+}
+
+impl Command for InitHCA {
+    type Output = InitHCAOutput;
+    fn outlen(&self) -> usize {
+        0x10
+    }
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -83,6 +104,14 @@ pub struct EnableHCAOutput {
 
     #[deku(pad_bytes_after = "4")]
     pub syndrome: u32,
+}
+
+impl Command for EnableHCA {
+    type Output = EnableHCAOutput;
+
+    fn outlen(&self) -> usize {
+        0x10
+    }
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -116,6 +145,14 @@ pub struct QueryISSIOutput {
     pub current_issi: u16,
 
     pub supported_issi: [u8; 0x50],
+}
+
+impl Command for QueryISSI {
+    type Output = QueryISSIOutput;
+
+    fn outlen(&self) -> usize {
+        0x70
+    }
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]

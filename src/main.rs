@@ -5,7 +5,7 @@ use std::{path::PathBuf, ptr::null_mut, thread::sleep, time::Duration};
 
 use clap::Parser;
 use dbg_hex::dbg_hex;
-use deku::DekuContainerWrite;
+use deku::{DekuContainerRead, DekuContainerWrite};
 use pci_driver::{
     backends::vfio::VfioPciDevice,
     device::PciDevice,
@@ -13,13 +13,16 @@ use pci_driver::{
     regions::{
         structured::{PciRegisterRo, PciRegisterRw},
         AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, PciRegion,
-        Permissions,
+        PciSubregion, Permissions,
     },
 };
 
 use crate::{
     error::{Error, Result},
-    types::{EnableHCA, QueryISSI, QueryISSIOutput, QueryPages, QueryPagesOutput},
+    types::{
+        Command, EnableHCA, InitHCA, ManagePages, QueryISSI, QueryISSIOutput, QueryPages,
+        QueryPagesOutput,
+    },
 };
 
 mod error;
@@ -90,6 +93,40 @@ pci_struct! {
     }
 }
 
+impl<'a> Mailbox<'a> {
+    pub fn set_data(&self, data: &[u8]) -> Result<()> {
+        for (i, b) in data.iter().enumerate() {
+            self.write_u8(i as u64, *b)?;
+        }
+        Ok(())
+    }
+
+    pub fn set_next(&self, ptr: u64) -> Result<()> {
+        self.next_pointer_hi().write(((ptr >> 32) as u32).to_be())?; 
+        self.next_pointer_lo().write(((ptr & 0xffffffff) as u32).to_be())?;
+        Ok(())
+    }
+
+    pub fn update_signature(&self) -> Result<()> {
+        self.signature().write(0x00)?;
+        self.ctrl_signature().write(0x00)?;
+        let mut mb_data = vec![0u8; self.len() as usize];
+        self.read_bytes(0, &mut mb_data)?;
+        let mut ctrl_signature = 0xff_u8;
+        for x in mb_data[0x1c0..0x200].iter() {
+            ctrl_signature ^= x;
+        }
+        self.ctrl_signature().write(ctrl_signature)?;
+        self.read_bytes(0, &mut mb_data)?;
+        let mut signature = 0xff_u8;
+        for x in mb_data.iter() {
+            signature ^= x;
+        }
+        self.signature().write(signature)?;
+        Ok(())
+    }
+}
+
 pub fn iommu_map(
     iommu: &pci_driver::iommu::PciIommu,
     iova: u64,
@@ -109,6 +146,32 @@ pub fn iommu_map(
             memory,
             length,
             Permissions::ReadWrite,
+        ))
+    }
+}
+
+pub struct MailboxAllocator<'a> {
+    region: PciSubregion<'a>,
+    allocation_offset: u64,
+}
+
+impl<'a> MailboxAllocator<'a> {
+    pub fn new(region: PciSubregion<'a>) -> MailboxAllocator<'a> {
+        Self {
+            region,
+            allocation_offset: 0,
+        }
+    }
+
+    pub fn allocate_mailbox(&mut self) -> Result<(u64, Mailbox<'a>)> {
+        let mailbox_offset = self.allocation_offset;
+        self.allocation_offset += 0x400;
+        Ok((
+            mailbox_offset,
+            Mailbox::backed_by(
+                self.region
+                    .subregion(mailbox_offset..mailbox_offset + 0x400),
+            ),
         ))
     }
 }
@@ -163,31 +226,74 @@ impl<'a> Mlx5CmdIf<'a> {
     pub fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
         log::info!("Executing command input={input:02x?} outlen={outlen}");
         let cmd = CQE::backed_by((&self.dma_region).subregion(0x000..0x400));
-        let in_mb = Mailbox::backed_by((&self.dma_region).subregion(0x400..0x800));
-        let out_mb = Mailbox::backed_by((&self.dma_region).subregion(0x800..0xc00));
+        let mut mailbox_allocator = MailboxAllocator::new((&self.dma_region).subregion(0x1000..));
 
         cmd.cmd_type().write(0x07)?;
 
         cmd.input_length().write((input.len() as u32).to_be())?;
-        cmd.input_mb_ptr_hi().write(0x00000000_u32.to_be())?;
-        cmd.input_mb_ptr_lo().write(0x10000400_u32.to_be())?;
-
-        cmd.output_length().write(outlen.to_be())?;
-        cmd.output_mb_ptr_hi().write(0x00000000_u32.to_be())?;
-        cmd.output_mb_ptr_lo().write(0x10000800_u32.to_be())?;
 
         for (i, b) in input[..0x10].iter().enumerate() {
             cmd.write_u8(0x10 + i as u64, *b)?;
         }
 
-        for (i, b) in input[0x10..].iter().enumerate() {
-            in_mb.write_u8(i as u64, *b)?;
+        cmd.input_mb_ptr_hi().write(0)?;
+        cmd.input_mb_ptr_lo().write(0)?;
+        cmd.output_mb_ptr_hi().write(0)?;
+        cmd.output_mb_ptr_lo().write(0)?;
+
+        let mut in_mb_vec: Vec<Mailbox<'_>> = vec![];
+        let mut block_number: u32 = 0;
+        for chunk in input[0x10..].chunks(0x200) {
+            let in_mb = if let Some(prev_in_mb) = in_mb_vec.last() {
+                let (offset, in_mb) = mailbox_allocator.allocate_mailbox()?;
+                prev_in_mb.set_next(0x00000000_10001000 + offset)?;
+                in_mb
+            } else {
+                let (offset, in_mb) = mailbox_allocator.allocate_mailbox()?;
+                cmd.input_mb_ptr_hi().write(0x00000000_u32.to_be())?;
+                cmd.input_mb_ptr_lo().write((0x10001000_u32 + offset as u32).to_be())?;
+                in_mb
+            };
+            in_mb.set_next(0_u64)?;
+            in_mb.set_data(chunk)?;
+            in_mb.token().write(0)?;
+            in_mb.block_number().write(block_number.to_be())?;
+            block_number += 1;
+            in_mb_vec.push(in_mb);
+        }
+
+        for in_mb in in_mb_vec.iter() {
+            in_mb.update_signature()?;
         }
 
         cmd.cmd_output_inline0().write(0x00000000_u32.to_be())?;
         cmd.cmd_output_inline1().write(0x00000000_u32.to_be())?;
         cmd.cmd_output_inline2().write(0x00000000_u32.to_be())?;
         cmd.cmd_output_inline3().write(0x00000000_u32.to_be())?;
+
+        let mut out_mb_vec: Vec<Mailbox<'_>> = vec![];
+        let mut block_number: u32 = 0;
+        for _ in (0x10..outlen).step_by(0x200) {
+            let out_mb = if let Some(prev_out_mb) = out_mb_vec.last() {
+                let (offset, out_mb) = mailbox_allocator.allocate_mailbox()?;
+                prev_out_mb.set_next(0x00000000_10001000 + offset)?;
+                out_mb
+            } else {
+                let (offset, out_mb) = mailbox_allocator.allocate_mailbox()?;
+                cmd.output_mb_ptr_hi().write(0x00000000_u32.to_be())?;
+                cmd.output_mb_ptr_lo().write((0x10001000_u32 + offset as u32).to_be())?;
+                out_mb
+            };
+            out_mb.set_next(0_u64)?;
+            out_mb.token().write(0x00)?;
+            out_mb.block_number().write(block_number.to_be())?;
+            block_number += 1;
+            out_mb_vec.push(out_mb);
+        }
+        for out_mb in out_mb_vec.iter() {
+            out_mb.update_signature()?;
+        }
+        cmd.output_length().write(outlen.to_be())?;
 
         cmd.token().write(0x00)?;
         cmd.status().write(0x01)?;
@@ -201,18 +307,30 @@ impl<'a> Mlx5CmdIf<'a> {
             log::trace!("Waiting for command status");
             sleep(Duration::from_millis(100));
         }
+        let err = cmd.status().read()? >> 1;
+        if err != 0x00 {
+            return Err(Error::CmdIf(err));
+        }
         log::debug!("Command: {cmd:?}");
 
         let mut output = vec![];
         for i in 0x00..0x10 {
             output.push(cmd.read_u8(0x20 + i)?)
         }
-
-        for i in 0x10..outlen {
-            output.push(out_mb.read_u8(i as u64)?);
+        for out_mb in out_mb_vec.iter() {
+            let mut chunk = vec![0u8; 0x200];
+            out_mb.read_bytes(0, &mut chunk)?;
+            output.extend_from_slice(&chunk[..]);
         }
+        output.resize(outlen as usize, 0);
 
         Ok(output)
+    }
+
+    pub fn do_command<Cmd: Command>(&self, cmd: Cmd) -> Result<Cmd::Output> {
+        let msg = cmd.to_bytes()?;
+        let out = self.exec_command(&msg, cmd.outlen() as u32)?;
+        Ok(Cmd::Output::from_bytes((&out, 0))?.1)
     }
 }
 
@@ -248,61 +366,88 @@ fn main() -> Result<()> {
 
     let pci_device = VfioPciDevice::open("/sys/bus/pci/devices/0000:04:00.0")?;
     pci_device.reset()?;
+
     let cmdif = Mlx5CmdIf::new(pci_device)?;
-    cmdif.exec_command(&EnableHCA(()).to_bytes()?, 0x10)?;
-    let out = cmdif.exec_command(&QueryISSI(()).to_bytes()?, 0x70)?;
-    let out = QueryISSIOutput::try_from(out.as_slice()).unwrap();
-    dbg!(out);
+    dbg!(cmdif.do_command(EnableHCA(()))?);
+    dbg!(cmdif.do_command(QueryISSI(()))?);
+
     // SET_ISSI
     let out = cmdif.exec_command(
         &[
-            0x01, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-            0x00, 0x00,
+            0x01, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         ],
         0x10,
     )?;
     dbg_hex!(out);
 
-    let out = cmdif.exec_command(
-        &QueryPages {
-            op_mod: types::QueryPagesOpMod::BootPages,
-        }
-        .to_bytes()?,
-        0x10,
+    let query_boot_pages = cmdif.do_command(QueryPages {
+        op_mod: types::QueryPagesOpMod::BootPages,
+    })?;
+    dbg!(&query_boot_pages);
+
+    let mut available_page = 0x00000000_10100000_u64;
+    let mut pages = vec![];
+    for i in 0x00..query_boot_pages.num_pages {
+        pages.push(available_page);
+        available_page += 0x1000;
+    }
+    let manage_pages_cmd = ManagePages {
+        op_mod: types::ManagePagesOpMod::AllocationSuccess,
+        input_num_entries: query_boot_pages.num_pages,
+        items: pages,
+    };
+    dbg_hex!(cmdif.exec_command(&manage_pages_cmd.to_bytes()?, 0x10)?);
+
+    let query_hca_cap = cmdif.exec_command(
+        &[
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+        0x1010,
     )?;
-    let out = QueryPagesOutput::try_from(out.as_slice()).unwrap();
-    dbg!(out);
-    // MANAGE_PAGES(1) 6 pages: 0x10010000 - 0x10015000
-    let mut manage_pages_msg = vec![
-        0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x06,
+
+    let mut set_hca_cap = vec![
+        0x01, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
-    manage_pages_msg.extend_from_slice(&0x00000000_10010000_u64.to_be_bytes());
-    manage_pages_msg.extend_from_slice(&0x00000000_10011000_u64.to_be_bytes());
-    manage_pages_msg.extend_from_slice(&0x00000000_10012000_u64.to_be_bytes());
-    manage_pages_msg.extend_from_slice(&0x00000000_10013000_u64.to_be_bytes());
-    manage_pages_msg.extend_from_slice(&0x00000000_10014000_u64.to_be_bytes());
-    manage_pages_msg.extend_from_slice(&0x00000000_10015000_u64.to_be_bytes());
-    let out = cmdif.exec_command(&manage_pages_msg, 0x10)?;
-    dbg_hex!(out);
-    //// QUERY_PAGES(2)
-    //let out = cmdif.exec_command(&[
-    //        0x01, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-    //        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    //    ], 0x10)?;
-    //dbg_hex!(out);
-    //    let mut msg = vec![
-    //        0x09, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    //        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    //        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    //        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    //    ];
-    //    msg.extend_from_slice(SHELLCODE);
-    //    let output = cmdif.exec_command(
-    //        &msg,
-    //        0x100,
-    //    )?;
-    //    dbg_hex!(output);
+//    set_hca_cap.extend_from_slice(&query_hca_cap[0x10..]);
+    set_hca_cap.extend_from_slice(&vec![0u8; 0x1000]);
+
+    dbg_hex!(cmdif.exec_command(&set_hca_cap, 0x10)?);
+
+    let query_init_pages = cmdif.do_command(QueryPages {
+        op_mod: types::QueryPagesOpMod::InitPages,
+    })?;
+    dbg!(&query_init_pages);
+
+    let mut pages = vec![];
+    for i in 0x00..query_init_pages.num_pages {
+        pages.push(available_page);
+        available_page += 0x1000;
+    }
+    let manage_pages_cmd = ManagePages {
+        op_mod: types::ManagePagesOpMod::AllocationSuccess,
+        input_num_entries: query_boot_pages.num_pages,
+        items: pages,
+    };
+
+    dbg_hex!(cmdif.exec_command(&manage_pages_cmd.to_bytes()?, 0x10)?);
+
+    dbg!(cmdif.do_command(InitHCA(()))?);
+
+//    let mut msg = vec![
+//        0x09, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//    ];
+//    msg.extend_from_slice(SHELLCODE);
+//    let output = cmdif.exec_command(
+//        &msg,
+//        0x100,
+//    )?;
+//    dbg_hex!(output);
 
     Ok(())
 }
