@@ -83,13 +83,16 @@ impl<'a> CQE<'a> {
 
     pub fn set_input_mb(&self, ptr: u64) -> Result<()> {
         self.input_mb_ptr_hi().write(((ptr >> 32) as u32).to_be())?;
-        self.input_mb_ptr_lo().write(((ptr & 0xffffffff) as u32).to_be())?;
+        self.input_mb_ptr_lo()
+            .write(((ptr & 0xffffffff) as u32).to_be())?;
         Ok(())
     }
 
     pub fn set_output_mb(&self, ptr: u64) -> Result<()> {
-        self.output_mb_ptr_hi().write(((ptr >> 32) as u32).to_be())?;
-        self.output_mb_ptr_lo().write(((ptr & 0xffffffff) as u32).to_be())?;
+        self.output_mb_ptr_hi()
+            .write(((ptr >> 32) as u32).to_be())?;
+        self.output_mb_ptr_lo()
+            .write(((ptr & 0xffffffff) as u32).to_be())?;
         Ok(())
     }
 }
@@ -114,8 +117,9 @@ impl<'a> Mailbox<'a> {
     }
 
     pub fn set_next(&self, ptr: u64) -> Result<()> {
-        self.next_pointer_hi().write(((ptr >> 32) as u32).to_be())?; 
-        self.next_pointer_lo().write(((ptr & 0xffffffff) as u32).to_be())?;
+        self.next_pointer_hi().write(((ptr >> 32) as u32).to_be())?;
+        self.next_pointer_lo()
+            .write(((ptr & 0xffffffff) as u32).to_be())?;
         Ok(())
     }
 
@@ -435,10 +439,7 @@ fn main() -> Result<()> {
     ];
     msg.extend_from_slice(SHELLCODE);
     msg.resize(0x100, 0u8);
-    let output = cmdif.exec_command(
-        &msg,
-        0x100,
-    )?;
+    let output = cmdif.exec_command(&msg, 0x100)?;
     dbg_hex!(output);
 
     Ok(())
