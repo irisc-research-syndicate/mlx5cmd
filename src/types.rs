@@ -4,9 +4,38 @@ use deku::ctx::Endian;
 use deku::prelude::*;
 
 pub trait Command: DekuContainerWrite {
-    type Output: for<'a> DekuContainerRead<'a>;
+    type Output: for<'a> DekuContainerRead<'a> + CommandOutput;
 
+    fn size(&self) -> usize;
     fn outlen(&self) -> usize;
+}
+
+pub trait CommandOutput {
+    fn status(&self) -> u8;
+    fn syndrome(&self) -> u32;
+}
+
+macro_rules! impl_command_output {
+    ($ty: ty) => {
+        impl CommandOutput for $ty {
+            fn status(&self) -> u8 {
+                self.base.status
+            }
+
+            fn syndrome(&self) -> u32 {
+                self.base.syndrome
+            }
+        }
+    };
+}
+
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "ctx_endian", ctx = "ctx_endian: Endian")]
+pub struct BaseOutput {
+    #[deku(pad_bytes_after = "3")]
+    pub status: u8,
+
+    pub syndrome: u32,
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -27,17 +56,19 @@ pub enum QueryPagesOpMod {
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
 pub struct QueryPagesOutput {
-    #[deku(pad_bytes_after = "3")]
-    pub status: u8,
-
     #[deku(pad_bytes_after = "4")]
-    pub syndrome: u32,
-
+    pub base: BaseOutput,
     pub num_pages: i32,
 }
 
+impl_command_output!(QueryPagesOutput);
+
 impl Command for QueryPages {
     type Output = QueryPagesOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
 
     fn outlen(&self) -> usize {
         0x10
@@ -57,6 +88,32 @@ pub struct ManagePages {
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big")]
+pub struct ManagePagesOutput {
+    pub base: BaseOutput,
+
+    #[deku(pad_bytes_after = "4")]
+    pub output_num_entries: u32,
+
+    #[deku(count = "output_num_entries")]
+    pub items: Vec<u64>,
+}
+
+impl_command_output!(ManagePagesOutput);
+
+impl Command for ManagePages {
+    type Output = ManagePagesOutput;
+
+    fn size(&self) -> usize {
+        0x10 + self.items.len() * 8
+    }
+
+    fn outlen(&self) -> usize {
+        0x10 + self.items.len() * 8
+    }
+}
+
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(type = "u16", endian = "ctx_endian", ctx = "ctx_endian: Endian")]
 pub enum ManagePagesOpMod {
     AllocationFail = 0x0,
@@ -72,21 +129,45 @@ pub struct SetDriverVersion {
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big")]
+pub struct SetDriverVersionOutput {
+    #[deku(pad_bytes_after = "4")]
+    pub base: BaseOutput,
+}
+
+impl_command_output!(SetDriverVersionOutput);
+
+impl Command for SetDriverVersion {
+    type Output = SetDriverVersionOutput;
+
+    fn size(&self) -> usize {
+        0x50
+    }
+
+    fn outlen(&self) -> usize {
+        0x10
+    }
+}
+
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big", magic = b"\x01\x02\0\0\0\0\0\0\0\0\0\0\0\0\0\0")]
 pub struct InitHCA(pub ());
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
 pub struct InitHCAOutput {
-    #[deku(pad_bytes_after = "3")]
-    pub status: u8,
-
     #[deku(pad_bytes_after = "4")]
-    pub syndrome: u32,
+    pub base: BaseOutput,
 }
+impl_command_output!(InitHCAOutput);
 
 impl Command for InitHCA {
     type Output = InitHCAOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
+
     fn outlen(&self) -> usize {
         0x10
     }
@@ -99,15 +180,17 @@ pub struct EnableHCA(pub ());
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
 pub struct EnableHCAOutput {
-    #[deku(pad_bytes_after = "3")]
-    pub status: u8,
-
     #[deku(pad_bytes_after = "4")]
-    pub syndrome: u32,
+    pub base: BaseOutput,
 }
+impl_command_output!(EnableHCAOutput);
 
 impl Command for EnableHCA {
     type Output = EnableHCAOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
 
     fn outlen(&self) -> usize {
         0x10
@@ -121,11 +204,22 @@ pub struct DisableHCA(pub ());
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
 pub struct DisableHCAOutput {
-    #[deku(pad_bytes_after = "3")]
-    pub status: u8,
-
     #[deku(pad_bytes_after = "4")]
-    pub syndrome: u32,
+    pub base: BaseOutput,
+}
+
+impl_command_output!(DisableHCAOutput);
+
+impl Command for DisableHCA {
+    type Output = DisableHCAOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
+
+    fn outlen(&self) -> usize {
+        0x10
+    }
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -135,11 +229,8 @@ pub struct QueryISSI(pub ());
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
 pub struct QueryISSIOutput {
-    #[deku(pad_bytes_after = "3")]
-    pub status: u8,
-
     #[deku(pad_bytes_after = "2")]
-    pub syndrome: u32,
+    pub base: BaseOutput,
 
     #[deku(pad_bytes_after = "20")]
     pub current_issi: u16,
@@ -147,8 +238,14 @@ pub struct QueryISSIOutput {
     pub supported_issi: [u8; 0x50],
 }
 
+impl_command_output!(QueryISSIOutput);
+
 impl Command for QueryISSI {
     type Output = QueryISSIOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
 
     fn outlen(&self) -> usize {
         0x70
@@ -162,15 +259,25 @@ pub struct QueryAdapter(pub ());
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
 pub struct QueryAdapterOutput {
-    #[deku(pad_bytes_after = "3")]
-    pub status: u8,
+    // why are we off by 4 here????
+    #[deku(pad_bytes_after = "8")]
+    pub base: BaseOutput,
 
-    #[deku(pad_bytes_after = "4")]
-    pub syndrome: u32,
-
-    // why do we need the 4 bytes here?????
-    #[deku(pad_bytes_before = "4")]
     pub query_adapter: QueryAdapterStruct,
+}
+
+impl_command_output!(QueryAdapterOutput);
+
+impl Command for QueryAdapter {
+    type Output = QueryAdapterOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
+
+    fn outlen(&self) -> usize {
+        0x110
+    }
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -181,6 +288,33 @@ pub struct QueryAdapterStruct {
     pub vsd_vendor_id: u16,
     pub vsd: [u8; 208],
     pub vsd_contd_psid: [u8; 16],
+}
+
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big", magic = b"\x01\x0b")]
+pub struct SetISSI {
+    #[deku(pad_bytes_before = "8", pad_bytes_after = "4")]
+    pub current_issi: u16,
+}
+impl_command_output!(SetISSIOutput);
+
+impl Command for SetISSI {
+    type Output = SetISSIOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
+
+    fn outlen(&self) -> usize {
+        0x10
+    }
+}
+
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big")]
+pub struct SetISSIOutput {
+    #[deku(pad_bytes_after = "8")]
+    pub base: BaseOutput,
 }
 
 #[cfg(test)]
@@ -197,7 +331,7 @@ mod tests {
 
         let res = cmd.to_bytes().unwrap();
 
-        assert_eq!(res.len(), 0x10);
+        assert_eq!(res.len(), cmd.size());
         assert_eq!(
             res,
             &[0x01, 0x07, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0]
@@ -207,11 +341,15 @@ mod tests {
             0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x20, 0x22,
         ];
 
+        assert_eq!(output.len(), cmd.outlen());
+
         assert_eq!(
             QueryPagesOutput::try_from(output).unwrap(),
             QueryPagesOutput {
-                status: 0,
-                syndrome: 0,
+                base: BaseOutput {
+                    status: 0,
+                    syndrome: 0
+                },
                 num_pages: 8226,
             }
         );
@@ -226,14 +364,35 @@ mod tests {
         };
 
         let res = cmd.to_bytes().unwrap();
+        assert_eq!(res.len(), cmd.size());
 
-        assert_eq!(res.len(), 0x10 + cmd.input_num_entries as usize * 8);
+        #[rustfmt::skip]
+        let cmd_bytes = &[
+            0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+            0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        ];
+
+        assert_eq!(res, cmd_bytes);
+
+        #[rustfmt::skip]
+        let output: &[u8] = &[
+            0xab, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x87, 0x65, 0x43, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        ];
+
+        assert_eq!(output.len(), cmd.outlen());
         assert_eq!(
-            res,
-            &[
-                1, 8, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 18, 52, 86, 120, 0, 0,
-                0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255
-            ]
+            ManagePagesOutput::try_from(output).unwrap(),
+            ManagePagesOutput {
+                base: BaseOutput {
+                    status: 0xab,
+                    syndrome: 0x12345678,
+                },
+                output_num_entries: 3,
+                items: vec![0x87654321, 0x0, u64::MAX],
+            }
         );
     }
 
@@ -249,8 +408,8 @@ mod tests {
             .unwrap();
 
         let res = cmd.to_bytes().unwrap();
+        assert_eq!(res.len(), cmd.size());
 
-        assert_eq!(res.len(), 0x50);
         assert_eq!(
             res,
             &[
@@ -268,7 +427,7 @@ mod tests {
 
         let res = cmd.to_bytes().unwrap();
 
-        assert_eq!(res.len(), 0x10);
+        assert_eq!(res.len(), cmd.size());
         assert_eq!(res, &[0x01, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
@@ -278,7 +437,7 @@ mod tests {
 
         let res = cmd.to_bytes().unwrap();
 
-        assert_eq!(res.len(), 0x10);
+        assert_eq!(res.len(), cmd.size());
         assert_eq!(res, &[0x01, 0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
@@ -288,7 +447,7 @@ mod tests {
 
         let res = cmd.to_bytes().unwrap();
 
-        assert_eq!(res.len(), 0x10);
+        assert_eq!(res.len(), cmd.size());
         assert_eq!(res, &[0x01, 0x05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
@@ -298,7 +457,7 @@ mod tests {
 
         let res = cmd.to_bytes().unwrap();
 
-        assert_eq!(res.len(), 0x10);
+        assert_eq!(res.len(), cmd.size());
         assert_eq!(res, &[0x01, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
         #[rustfmt::skip]
@@ -312,11 +471,15 @@ mod tests {
             0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
         ];
 
+        assert_eq!(output.len(), cmd.outlen());
+
         assert_eq!(
             QueryISSIOutput::try_from(output).unwrap(),
             QueryISSIOutput {
-                status: 0xab,
-                syndrome: 0x12345678,
+                base: BaseOutput {
+                    status: 0xab,
+                    syndrome: 0x12345678,
+                },
                 current_issi: 0xaabb,
                 supported_issi: std::array::from_fn(|i| i as u8),
             }
@@ -329,7 +492,7 @@ mod tests {
 
         let res = cmd.to_bytes().unwrap();
 
-        assert_eq!(res.len(), 0x10);
+        assert_eq!(res.len(), cmd.size());
         assert_eq!(res, &[0x01, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
         let query_adapter = QueryAdapterStruct {
@@ -340,8 +503,10 @@ mod tests {
         };
 
         let out = QueryAdapterOutput {
-            status: 0xab,
-            syndrome: 0x12345678,
+            base: BaseOutput {
+                status: 0xab,
+                syndrome: 0x12345678,
+            },
             query_adapter,
         };
 
@@ -368,7 +533,39 @@ mod tests {
 
         let out_bytes = out.to_bytes().unwrap();
 
-        assert_eq!(out_bytes.len(), 0x110);
+        assert_eq!(output.len(), cmd.outlen());
         assert_eq!(out_bytes, output, "{out_bytes:02x?}");
+    }
+
+    #[test]
+    fn test_set_issi() {
+        let cmd = SetISSI {
+            current_issi: 0x1337,
+        };
+
+        let res = cmd.to_bytes().unwrap();
+
+        assert_eq!(res.len(), cmd.size());
+        #[rustfmt::skip]
+        assert_eq!(res, &[
+            0x01, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x37, 0x00, 0x00, 0x00, 0x00
+        ]);
+
+        #[rustfmt::skip]
+        let output: &[u8] = &[
+            0xab, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        assert_eq!(output.len(), cmd.outlen());
+
+        assert_eq!(
+            SetISSIOutput::try_from(output).unwrap(),
+            SetISSIOutput {
+                base: BaseOutput {
+                    status: 0xab,
+                    syndrome: 0x12345678,
+                },
+            }
+        );
     }
 }
