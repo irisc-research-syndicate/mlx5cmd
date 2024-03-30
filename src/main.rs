@@ -394,7 +394,7 @@ fn main() -> Result<()> {
     }
     let manage_pages_cmd = ManagePages {
         op_mod: types::ManagePagesOpMod::AllocationSuccess,
-        input_num_entries: query_boot_pages.num_pages,
+        input_num_entries: query_boot_pages.num_pages as u32,
         items: pages,
     };
     dbg_hex!(cmdif.exec_command(&manage_pages_cmd.to_bytes()?, 0x10)?);
@@ -428,7 +428,7 @@ fn main() -> Result<()> {
     }
     let manage_pages_cmd = ManagePages {
         op_mod: types::ManagePagesOpMod::AllocationSuccess,
-        input_num_entries: query_boot_pages.num_pages,
+        input_num_entries: query_init_pages.num_pages as u32,
         items: pages,
     };
 

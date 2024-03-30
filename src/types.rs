@@ -33,7 +33,7 @@ pub struct QueryPagesOutput {
     #[deku(pad_bytes_after = "4")]
     pub syndrome: u32,
 
-    pub num_pages: u32,
+    pub num_pages: i32,
 }
 
 impl Command for QueryPages {
