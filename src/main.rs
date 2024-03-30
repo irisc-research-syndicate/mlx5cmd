@@ -215,7 +215,7 @@ impl<'a> MailboxAllocator<'a> {
 }
 
 #[allow(dead_code)]
-struct Mlx5CmdIf<'a> {
+pub struct Mlx5CmdIf<'a> {
     pci_device: VfioPciDevice,
     bar0_region: MappedOwningPciRegion,
     dma_region: PciMemoryRegion<'a>,
@@ -240,6 +240,10 @@ impl<'a> Mlx5CmdIf<'a> {
         this.setup_cmdq_phy_addr(0x10000000_u64)?;
 
         Ok(this)
+    }
+
+    pub fn iommu_map(&self, iova: u64, length: usize) -> Result<PciMemoryRegion<'a>> {
+        iommu_map(&self.pci_device.iommu(), iova, length)
     }
 
     pub fn init_segment(&self) -> InitSegment {
@@ -382,7 +386,7 @@ fn main() -> Result<()> {
     })?;
     dbg!(&query_boot_pages);
 
-    let mut available_page = 0x00000000_10100000_u64;
+    let mut available_page = 0x00000000_11000000_u64;
     let mut pages = vec![];
     for i in 0x00..query_boot_pages.num_pages {
         pages.push(available_page);
