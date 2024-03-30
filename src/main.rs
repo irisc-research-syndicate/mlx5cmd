@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use std::{path::PathBuf, ptr::null_mut, thread::sleep, time::Duration};
+use std::{fmt::Debug, path::PathBuf, ptr::null_mut, thread::sleep, time::Duration};
 
 use clap::Parser;
 use dbg_hex::dbg_hex;
@@ -20,8 +20,8 @@ use pci_driver::{
 use crate::{
     error::{Error, Result},
     types::{
-        Command, EnableHCA, InitHCA, ManagePages, QueryISSI, QueryISSIOutput, QueryPages,
-        QueryPagesOutput, SetISSI,
+        Command, CommandOutput, EnableHCA, InitHCA, ManagePages, QueryISSI, QueryISSIOutput,
+        QueryPages, QueryPagesOutput, SetISSI,
     },
 };
 
@@ -268,7 +268,7 @@ impl<'a> Mlx5CmdIf<'a> {
     }
 
     pub fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
-        log::info!("Executing command input={input:02x?} outlen={outlen}");
+        log::debug!("Executing command input={input:02x?} outlen={outlen}");
         let cmd = CQE::backed_by((&self.dma_region).subregion(0x000..0x400));
         let mut mailbox_allocator = MailboxAllocator::new((&self.dma_region).subregion(0x1000..));
 
@@ -329,10 +329,17 @@ impl<'a> Mlx5CmdIf<'a> {
         Ok(output)
     }
 
-    pub fn do_command<Cmd: Command>(&self, cmd: Cmd) -> Result<Cmd::Output> {
+    pub fn do_command<Cmd: Command + Debug>(&self, cmd: Cmd) -> Result<Cmd::Output> {
         let msg = cmd.to_bytes()?;
         let out = self.exec_command(&msg, cmd.outlen() as u32)?;
-        Ok(Cmd::Output::from_bytes((&out, 0))?.1)
+        let res = Cmd::Output::from_bytes((&out, 0))?.1;
+        log::info!(
+            "command={cmd:?} status={status} syndrome={syndrome}",
+            status = res.status(),
+            syndrome = res.syndrome(),
+        );
+        log::debug!("output: {res:?}");
+        Ok(res)
     }
 }
 
@@ -374,7 +381,6 @@ fn main() -> Result<()> {
     dbg!(cmdif.do_command(QueryISSI(()))?);
 
     let out = cmdif.do_command(SetISSI { current_issi: 1 })?;
-    dbg_hex!(out);
 
     let query_boot_pages = cmdif.do_command(QueryPages {
         op_mod: types::QueryPagesOpMod::BootPages,
@@ -392,7 +398,6 @@ fn main() -> Result<()> {
         input_num_entries: query_boot_pages.num_pages as u32,
         items: pages,
     };
-    dbg_hex!(cmdif.do_command(manage_pages_cmd)?);
 
     let query_hca_cap = cmdif.exec_command(
         &[
@@ -405,7 +410,6 @@ fn main() -> Result<()> {
     let query_init_pages = cmdif.do_command(QueryPages {
         op_mod: types::QueryPagesOpMod::InitPages,
     })?;
-    dbg!(&query_init_pages);
 
     let mut pages = vec![];
     for i in 0x00..query_init_pages.num_pages {
@@ -418,9 +422,8 @@ fn main() -> Result<()> {
         items: pages,
     };
 
-    dbg_hex!(cmdif.do_command(manage_pages_cmd)?);
-
-    dbg!(cmdif.do_command(InitHCA(()))?);
+    cmdif.do_command(manage_pages_cmd)?;
+    cmdif.do_command(InitHCA(()))?;
 
     let mut msg = vec![
         0x09, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -430,7 +433,6 @@ fn main() -> Result<()> {
     msg.extend_from_slice(SHELLCODE);
     msg.resize(0x100, 0u8);
     let output = cmdif.exec_command(&msg, 0x100)?;
-    dbg_hex!(output);
 
     Ok(())
 }

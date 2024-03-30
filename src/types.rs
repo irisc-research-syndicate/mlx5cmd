@@ -1,4 +1,5 @@
 use std::ffi::CStr;
+use std::fmt::Debug;
 
 use deku::ctx::Endian;
 use deku::prelude::*;
@@ -10,7 +11,7 @@ pub trait Command: DekuContainerWrite {
     fn outlen(&self) -> usize;
 }
 
-pub trait CommandOutput {
+pub trait CommandOutput: Debug {
     fn status(&self) -> u8;
     fn syndrome(&self) -> u32;
 }
