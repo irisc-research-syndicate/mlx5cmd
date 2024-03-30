@@ -356,20 +356,6 @@ pub const SHELLCODE: &[u8] = &[
     0xfc, 0x00, 0x00, 0x2d,
 ];
 
-pub const QUERY_HCA_CAP: u32 = 0x01000000_u32;
-pub const QUERY_ADAPTER: u32 = 0x01010000_u32;
-pub const INIT_HCA: u32 = 0x01020000_u32;
-pub const TEARDOWN_HCA: u32 = 0x01030000_u32;
-pub const ENABLE_HCA: u32 = 0x01040000_u32;
-pub const DISABLE_HCA: u32 = 0x01050000_u32;
-pub const QUERY_PAGES: u32 = 0x01070000_u32;
-pub const MANAGE_PAGES: u32 = 0x01080000_u32;
-pub const SET_HCA_CAP: u32 = 0x01090000_u32;
-pub const QUERY_ISSI: u32 = 0x010a0000_u32;
-pub const SET_ISSI: u32 = 0x010b0000_u32;
-pub const QUERY_FLOW_TABLE: u32 = 0x09320000_u32;
-pub const EXEC_SHELLCODE: u32 = 0x09320000_u32;
-
 fn main() -> Result<()> {
     env_logger::init();
 
