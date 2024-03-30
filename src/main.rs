@@ -146,7 +146,7 @@ pub fn iommu_map(
 ) -> Result<PciMemoryRegion<'static>> {
     unsafe {
         let memory = libc::mmap(
-            null_mut(),
+            iova as *mut libc::c_void,
             length,
             libc::PROT_READ | libc::PROT_WRITE,
             libc::MAP_ANONYMOUS | libc::MAP_PRIVATE,
@@ -185,6 +185,32 @@ impl<'a> MailboxAllocator<'a> {
                     .subregion(mailbox_offset..mailbox_offset + 0x400),
             ),
         ))
+    }
+
+    pub fn build_mailbox(&mut self, token: u8, data: &[u8]) -> Result<Vec<Mailbox<'a>>> {
+        let mut mb_vec: Vec<Mailbox<'_>> = vec![];
+        let mut block_number: u32 = 0;
+
+        for chunk in data.chunks(0x200) {
+            let mb = self.allocate_mailbox()?.1;
+            if let Some(prev_mb) = mb_vec.last() {
+                prev_mb.set_next(mb.as_ptr().unwrap() as u64)?;
+            }
+            mb.set_next(0_u64)?;
+            mb.set_data(chunk)?;
+            mb.token().write(token)?;
+
+            mb.block_number().write(block_number.to_be())?;
+            block_number += 1;
+
+            mb_vec.push(mb);
+        }
+
+        for mb in mb_vec.iter() {
+            mb.update_signature()?;
+        }
+
+        Ok(mb_vec)
     }
 }
 
@@ -242,70 +268,28 @@ impl<'a> Mlx5CmdIf<'a> {
 
         cmd.cmd_type().write(0x07)?;
 
-        cmd.input_length().write((input.len() as u32).to_be())?;
+        cmd.set_input_mb(0)?;
+        cmd.set_output_mb(0)?;
 
+        cmd.input_length().write((input.len() as u32).to_be())?;
         for (i, b) in input[..0x10].iter().enumerate() {
             cmd.write_u8(0x10 + i as u64, *b)?;
         }
 
-        cmd.input_mb_ptr_hi().write(0)?;
-        cmd.input_mb_ptr_lo().write(0)?;
-        cmd.output_mb_ptr_hi().write(0)?;
-        cmd.output_mb_ptr_lo().write(0)?;
-
-        let mut in_mb_vec: Vec<Mailbox<'_>> = vec![];
-        let mut block_number: u32 = 0;
-        for chunk in input[0x10..].chunks(0x200) {
-            let in_mb = if let Some(prev_in_mb) = in_mb_vec.last() {
-                let (offset, in_mb) = mailbox_allocator.allocate_mailbox()?;
-                prev_in_mb.set_next(0x00000000_10001000 + offset)?;
-                in_mb
-            } else {
-                let (offset, in_mb) = mailbox_allocator.allocate_mailbox()?;
-                cmd.input_mb_ptr_hi().write(0x00000000_u32.to_be())?;
-                cmd.input_mb_ptr_lo().write((0x10001000_u32 + offset as u32).to_be())?;
-                in_mb
-            };
-            in_mb.set_next(0_u64)?;
-            in_mb.set_data(chunk)?;
-            in_mb.token().write(0)?;
-            in_mb.block_number().write(block_number.to_be())?;
-            block_number += 1;
-            in_mb_vec.push(in_mb);
+        let in_mb_vec = mailbox_allocator.build_mailbox(0x00, &input[0x10..])?;
+        if let Some(in_mb) = in_mb_vec.first() {
+            cmd.set_input_mb(in_mb.as_ptr().unwrap() as u64)?;
         }
 
-        for in_mb in in_mb_vec.iter() {
-            in_mb.update_signature()?;
-        }
-
-        cmd.cmd_output_inline0().write(0x00000000_u32.to_be())?;
-        cmd.cmd_output_inline1().write(0x00000000_u32.to_be())?;
-        cmd.cmd_output_inline2().write(0x00000000_u32.to_be())?;
-        cmd.cmd_output_inline3().write(0x00000000_u32.to_be())?;
-
-        let mut out_mb_vec: Vec<Mailbox<'_>> = vec![];
-        let mut block_number: u32 = 0;
-        for _ in (0x10..outlen).step_by(0x200) {
-            let out_mb = if let Some(prev_out_mb) = out_mb_vec.last() {
-                let (offset, out_mb) = mailbox_allocator.allocate_mailbox()?;
-                prev_out_mb.set_next(0x00000000_10001000 + offset)?;
-                out_mb
-            } else {
-                let (offset, out_mb) = mailbox_allocator.allocate_mailbox()?;
-                cmd.output_mb_ptr_hi().write(0x00000000_u32.to_be())?;
-                cmd.output_mb_ptr_lo().write((0x10001000_u32 + offset as u32).to_be())?;
-                out_mb
-            };
-            out_mb.set_next(0_u64)?;
-            out_mb.token().write(0x00)?;
-            out_mb.block_number().write(block_number.to_be())?;
-            block_number += 1;
-            out_mb_vec.push(out_mb);
-        }
-        for out_mb in out_mb_vec.iter() {
-            out_mb.update_signature()?;
-        }
         cmd.output_length().write(outlen.to_be())?;
+        for (i, b) in [0u8; 0x10].iter().enumerate() {
+            cmd.write_u8(0x20 + i as u64, *b)?;
+        }
+
+        let out_mb_vec = mailbox_allocator.build_mailbox(0x00, &vec![0u8; outlen as usize])?;
+        if let Some(out_mb) = out_mb_vec.first() {
+            cmd.set_output_mb(out_mb.as_ptr().unwrap() as u64)?;
+        }
 
         cmd.token().write(0x00)?;
         cmd.status().write(0x01)?;
