@@ -80,6 +80,18 @@ impl<'a> CQE<'a> {
         self.signature().write(signature)?;
         Ok(())
     }
+
+    pub fn set_input_mb(&self, ptr: u64) -> Result<()> {
+        self.input_mb_ptr_hi().write(((ptr >> 32) as u32).to_be())?;
+        self.input_mb_ptr_lo().write(((ptr & 0xffffffff) as u32).to_be())?;
+        Ok(())
+    }
+
+    pub fn set_output_mb(&self, ptr: u64) -> Result<()> {
+        self.output_mb_ptr_hi().write(((ptr >> 32) as u32).to_be())?;
+        self.output_mb_ptr_lo().write(((ptr & 0xffffffff) as u32).to_be())?;
+        Ok(())
+    }
 }
 
 pci_struct! {
