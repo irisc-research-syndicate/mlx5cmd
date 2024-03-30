@@ -193,9 +193,8 @@ impl<'a> MailboxAllocator<'a> {
 
     pub fn build_mailbox(&mut self, token: u8, data: &[u8]) -> Result<Vec<Mailbox<'a>>> {
         let mut mb_vec: Vec<Mailbox<'_>> = vec![];
-        let mut block_number: u32 = 0;
 
-        for chunk in data.chunks(0x200) {
+        for (block_number, chunk) in data.chunks(0x200).enumerate() {
             let mb = self.allocate_mailbox()?.1;
             if let Some(prev_mb) = mb_vec.last() {
                 prev_mb.set_next(mb.as_ptr().unwrap() as u64)?;
@@ -204,8 +203,7 @@ impl<'a> MailboxAllocator<'a> {
             mb.set_data(chunk)?;
             mb.token().write(token)?;
 
-            mb.block_number().write(block_number.to_be())?;
-            block_number += 1;
+            mb.block_number().write((block_number as u32).to_be())?;
 
             mb_vec.push(mb);
         }
@@ -232,7 +230,7 @@ impl<'a> Mlx5CmdIf<'a> {
             .command()
             .bus_master_enable()
             .write(true)?;
-        let bar0 = pci_device.bar(0).ok_or(Error::Bar0Error)?;
+        let bar0 = pci_device.bar(0).ok_or(Error::Bar0)?;
         let bar0_region = bar0.map(..bar0.len(), Permissions::ReadWrite)?;
         let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, 0x8000000)?;
 
