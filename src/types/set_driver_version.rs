@@ -1,4 +1,3 @@
-use deku::ctx::Endian;
 use deku::prelude::*;
 
 use crate::impl_command_output;

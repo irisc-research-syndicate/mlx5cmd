@@ -53,8 +53,6 @@ pub enum ManagePagesOpMod {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
 
     #[test]

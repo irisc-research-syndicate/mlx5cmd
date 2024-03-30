@@ -43,8 +43,6 @@ impl Command for QueryPages {
 }
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
 
     #[test]

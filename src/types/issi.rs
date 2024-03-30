@@ -1,4 +1,3 @@
-use deku::ctx::Endian;
 use deku::prelude::*;
 
 use crate::impl_command_output;
@@ -64,8 +63,6 @@ pub struct SetISSIOutput {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
 
     #[test]

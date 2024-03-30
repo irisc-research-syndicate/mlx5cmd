@@ -12,7 +12,6 @@ pub use query_adapter::*;
 pub use query_pages::*;
 pub use set_driver_version::*;
 
-use std::ffi::CStr;
 use std::fmt::Debug;
 
 use deku::ctx::Endian;

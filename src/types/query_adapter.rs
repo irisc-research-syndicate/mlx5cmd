@@ -45,8 +45,6 @@ pub struct QueryAdapterStruct {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
 
     #[test]

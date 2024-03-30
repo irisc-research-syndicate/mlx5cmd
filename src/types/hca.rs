@@ -1,4 +1,3 @@
-use deku::ctx::Endian;
 use deku::prelude::*;
 
 use crate::impl_command_output;
@@ -80,8 +79,6 @@ impl Command for DisableHCA {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
 
     #[test]
