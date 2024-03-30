@@ -407,15 +407,6 @@ fn main() -> Result<()> {
         0x1010,
     )?;
 
-    let mut set_hca_cap = vec![
-        0x01, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    ];
-//    set_hca_cap.extend_from_slice(&query_hca_cap[0x10..]);
-    set_hca_cap.extend_from_slice(&vec![0u8; 0x1000]);
-
-    dbg_hex!(cmdif.exec_command(&set_hca_cap, 0x10)?);
-
     let query_init_pages = cmdif.do_command(QueryPages {
         op_mod: types::QueryPagesOpMod::InitPages,
     })?;
