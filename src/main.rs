@@ -10,7 +10,7 @@ use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 use crate::{
     error::Result,
     mlx::Mlx5CmdIf,
-    types::{EnableHCA, InitHCA, ManagePages, QueryISSI, QueryPages, SetISSI},
+    types::{EnableHCA, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI},
 };
 
 pub mod cqe;
@@ -63,13 +63,7 @@ fn main() -> Result<()> {
     };
     cmdif.do_command(manage_pages_cmd)?;
 
-    let query_hca_cap = cmdif.exec_command(
-        &[
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ],
-        0x1010,
-    )?;
+    cmdif.do_command(QueryHCACap { op_mod: 0x0001 })?;
 
     let query_init_pages = cmdif.do_command(QueryPages {
         op_mod: types::QueryPagesOpMod::InitPages,
