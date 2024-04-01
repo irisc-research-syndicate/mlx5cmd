@@ -1,3 +1,4 @@
+pub mod exec_shellcode;
 pub mod hca;
 pub mod issi;
 pub mod manage_pages;
@@ -6,6 +7,7 @@ pub mod query_hca_cap;
 pub mod query_pages;
 pub mod set_driver_version;
 
+pub use exec_shellcode::*;
 pub use hca::*;
 pub use issi::*;
 pub use manage_pages::*;

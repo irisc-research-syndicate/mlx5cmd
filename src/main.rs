@@ -10,7 +10,9 @@ use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 use crate::{
     error::Result,
     mlx::Mlx5CmdIf,
-    types::{EnableHCA, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI},
+    types::{
+        EnableHCA, ExecShellcode, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI,
+    },
 };
 
 pub mod cqe;
@@ -83,15 +85,14 @@ fn main() -> Result<()> {
     cmdif.do_command(manage_pages_cmd)?;
     cmdif.do_command(InitHCA(()))?;
 
-    let mut msg = vec![
-        0x09, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00,
-    ];
-    msg.extend_from_slice(SHELLCODE);
-    msg.resize(0x100, 0u8);
-    let output = cmdif.exec_command(&msg, 0x100)?;
-    dbg!(output);
+    let mut shellcode = [0u8; 0xa0];
+    shellcode[..SHELLCODE.len()].copy_from_slice(SHELLCODE);
+
+    dbg!(cmdif.do_command(ExecShellcode {
+        op_mod: 0x0000,
+        args: [0, 0, 0, 0, 0, 0],
+        shellcode,
+    })?);
 
     Ok(())
 }
