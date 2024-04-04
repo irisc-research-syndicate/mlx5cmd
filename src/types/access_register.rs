@@ -7,12 +7,12 @@ use super::{BaseOutput, Command};
 #[deku(endian = "big", magic = b"\x08\x05")]
 pub struct AccessRegister {
     #[deku(pad_bytes_before = "4", pad_bytes_after = "2")]
-    op_mod: AccessRegisterOpMod,
+    pub op_mod: AccessRegisterOpMod,
 
-    register_id: u16,
-    argument: u32,
+    pub register_id: u16,
+    pub argument: u32,
     #[deku(bytes_read = "deku::rest.len()")]
-    register_data: Vec<u32>,
+    pub register_data: Vec<u32>,
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
