@@ -15,8 +15,9 @@ pub use query_adapter::*;
 pub use query_hca_cap::*;
 pub use query_pages::*;
 pub use set_driver_version::*;
+use thiserror::Error;
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use deku::ctx::Endian;
 use deku::prelude::*;
@@ -38,11 +39,11 @@ macro_rules! impl_command_output {
     ($ty: ty) => {
         impl crate::types::CommandOutput for $ty {
             fn status(&self) -> u8 {
-                self.base.status
+                0
             }
 
             fn syndrome(&self) -> u32 {
-                self.base.syndrome
+                0
             }
         }
     };
@@ -52,7 +53,69 @@ macro_rules! impl_command_output {
 #[deku(endian = "ctx_endian", ctx = "ctx_endian: Endian")]
 pub struct BaseOutput {
     #[deku(pad_bytes_after = "3")]
-    pub status: u8,
+    pub status: CommandErrorStatus,
 
     pub syndrome: u32,
+}
+
+#[derive(Error, Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(type = "u8", endian = "ctx_endian", ctx = "ctx_endian: Endian")]
+pub enum CommandErrorStatus {
+    #[error["Ok"]]
+    #[deku(id="0x00")]
+    Ok,
+
+    #[error["Internal error"]]
+    #[deku(id="0x01")]
+    InternalError,
+
+    #[error["Bad operation"]]
+    #[deku(id="0x02")]
+    BadOperation,
+
+    #[error["Bad parameter"]]
+    #[deku(id="0x03")]
+    BadParameter,
+
+    #[error["Bad system State"]]
+    #[deku(id="0x04")]
+    BadSystemState,
+
+    #[error["Bad resource"]]
+    #[deku(id="0x05")]
+    BadResource,
+
+    #[error["Resource busy"]]
+    #[deku(id="0x06")]
+    ResourceBusy,
+
+    // 0x07 ???
+
+    #[error["Exceeded limit"]]
+    #[deku(id="0x08")]
+    ExceededLimit,
+
+    #[error["Bad resource state"]]
+    #[deku(id="0x09")]
+    BadResourceState,
+
+    #[error["Bad index"]]
+    #[deku(id="0x0a")]
+    BadIndex,
+
+    #[error["No resources"]]
+    #[deku(id="0x0f")]
+    NoResources,
+
+    #[error["Bad input length"]]
+    #[deku(id="0x50")]
+    BadInputLen,
+
+    #[error["Bad output length"]]
+    #[deku(id="0x51")]
+    BadOutputLen,
+
+    #[error["Unkonwn error status code: {0}"]]
+    #[deku(id_pat = "_")]
+    UnknownError(u8),
 }
