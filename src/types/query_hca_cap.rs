@@ -1,7 +1,5 @@
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -19,8 +17,6 @@ pub struct QueryHCACapOutput {
 
     pub capabilities: [u8; 0x1000],
 }
-
-impl_command_output!(QueryHCACapOutput);
 
 impl Command for QueryHCACap {
     type Output = QueryHCACapOutput;

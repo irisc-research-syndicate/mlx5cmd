@@ -1,7 +1,5 @@
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -14,7 +12,6 @@ pub struct InitHCAOutput {
     #[deku(pad_bytes_after = "4")]
     pub base: BaseOutput,
 }
-impl_command_output!(InitHCAOutput);
 
 impl Command for InitHCA {
     type Output = InitHCAOutput;
@@ -38,7 +35,6 @@ pub struct EnableHCAOutput {
     #[deku(pad_bytes_after = "4")]
     pub base: BaseOutput,
 }
-impl_command_output!(EnableHCAOutput);
 
 impl Command for EnableHCA {
     type Output = EnableHCAOutput;
@@ -62,8 +58,6 @@ pub struct DisableHCAOutput {
     #[deku(pad_bytes_after = "4")]
     pub base: BaseOutput,
 }
-
-impl_command_output!(DisableHCAOutput);
 
 impl Command for DisableHCA {
     type Output = DisableHCAOutput;

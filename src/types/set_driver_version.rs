@@ -1,7 +1,5 @@
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -17,8 +15,6 @@ pub struct SetDriverVersionOutput {
     #[deku(pad_bytes_after = "4")]
     pub base: BaseOutput,
 }
-
-impl_command_output!(SetDriverVersionOutput);
 
 impl Command for SetDriverVersion {
     type Output = SetDriverVersionOutput;

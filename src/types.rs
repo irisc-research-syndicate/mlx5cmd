@@ -17,36 +17,16 @@ pub use query_pages::*;
 pub use set_driver_version::*;
 use thiserror::Error;
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 use deku::ctx::Endian;
 use deku::prelude::*;
 
 pub trait Command: DekuContainerWrite {
-    type Output: for<'a> DekuContainerRead<'a> + CommandOutput;
+    type Output: for<'a> DekuContainerRead<'a> + Debug;
 
     fn size(&self) -> usize;
     fn outlen(&self) -> usize;
-}
-
-pub trait CommandOutput: Debug {
-    fn status(&self) -> u8;
-    fn syndrome(&self) -> u32;
-}
-
-#[macro_export]
-macro_rules! impl_command_output {
-    ($ty: ty) => {
-        impl crate::types::CommandOutput for $ty {
-            fn status(&self) -> u8 {
-                0
-            }
-
-            fn syndrome(&self) -> u32 {
-                0
-            }
-        }
-    };
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -58,61 +38,64 @@ pub struct BaseOutput {
     pub syndrome: u32,
 }
 
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big")]
+pub struct BaseOutputStatus(pub BaseOutput);
+
 #[derive(Error, Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(type = "u8", endian = "ctx_endian", ctx = "ctx_endian: Endian")]
 pub enum CommandErrorStatus {
     #[error["Ok"]]
-    #[deku(id="0x00")]
+    #[deku(id = "0x00")]
     Ok,
 
     #[error["Internal error"]]
-    #[deku(id="0x01")]
+    #[deku(id = "0x01")]
     InternalError,
 
     #[error["Bad operation"]]
-    #[deku(id="0x02")]
+    #[deku(id = "0x02")]
     BadOperation,
 
     #[error["Bad parameter"]]
-    #[deku(id="0x03")]
+    #[deku(id = "0x03")]
     BadParameter,
 
     #[error["Bad system State"]]
-    #[deku(id="0x04")]
+    #[deku(id = "0x04")]
     BadSystemState,
 
     #[error["Bad resource"]]
-    #[deku(id="0x05")]
+    #[deku(id = "0x05")]
     BadResource,
 
     #[error["Resource busy"]]
-    #[deku(id="0x06")]
+    #[deku(id = "0x06")]
     ResourceBusy,
 
     // 0x07 ???
-
     #[error["Exceeded limit"]]
-    #[deku(id="0x08")]
+    #[deku(id = "0x08")]
     ExceededLimit,
 
     #[error["Bad resource state"]]
-    #[deku(id="0x09")]
+    #[deku(id = "0x09")]
     BadResourceState,
 
     #[error["Bad index"]]
-    #[deku(id="0x0a")]
+    #[deku(id = "0x0a")]
     BadIndex,
 
     #[error["No resources"]]
-    #[deku(id="0x0f")]
+    #[deku(id = "0x0f")]
     NoResources,
 
     #[error["Bad input length"]]
-    #[deku(id="0x50")]
+    #[deku(id = "0x50")]
     BadInputLen,
 
     #[error["Bad output length"]]
-    #[deku(id="0x51")]
+    #[deku(id = "0x51")]
     BadOutputLen,
 
     #[error["Unkonwn error status code: {0}"]]

@@ -5,7 +5,7 @@ use crate::{
     error::{Error, Result},
     init::InitSegment,
     mailbox::MailboxAllocator,
-    types::{Command, CommandOutput},
+    types::{BaseOutputStatus, Command, CommandErrorStatus},
 };
 use deku::DekuContainerRead;
 use pci_driver::{
@@ -133,12 +133,15 @@ impl<'a> Mlx5CmdIf<'a> {
     pub fn do_command<Cmd: Command + Debug>(&self, cmd: Cmd) -> Result<Cmd::Output> {
         let msg = cmd.to_bytes()?;
         let out = self.exec_command(&msg, cmd.outlen() as u32)?;
+        let base_output = BaseOutputStatus::from_bytes((&out, 0))?.1;
+        if base_output.0.status != CommandErrorStatus::Ok {
+            return Err(Error::Command {
+                status: base_output.0.status,
+                syndrome: base_output.0.syndrome,
+            });
+        }
+
         let res = Cmd::Output::from_bytes((&out, 0))?.1;
-        log::info!(
-            "command={cmd:?} status={status} syndrome={syndrome}",
-            status = res.status(),
-            syndrome = res.syndrome(),
-        );
         log::debug!("output: {res:?}");
         Ok(res)
     }

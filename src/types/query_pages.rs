@@ -1,8 +1,6 @@
 use deku::ctx::Endian;
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -28,8 +26,6 @@ pub struct QueryPagesOutput {
     pub num_pages: i32,
 }
 
-impl_command_output!(QueryPagesOutput);
-
 impl Command for QueryPages {
     type Output = QueryPagesOutput;
 
@@ -44,6 +40,7 @@ impl Command for QueryPages {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::CommandErrorStatus;
 
     #[test]
     fn test_query_pages() {
@@ -60,7 +57,7 @@ mod tests {
         );
 
         let output: &[u8] = &[
-            0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x20, 0x22,
+            0xab, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x20, 0x22,
         ];
 
         assert_eq!(output.len(), cmd.outlen());
@@ -69,7 +66,7 @@ mod tests {
             QueryPagesOutput::try_from(output).unwrap(),
             QueryPagesOutput {
                 base: BaseOutput {
-                    status: 0,
+                    status: CommandErrorStatus::UnknownError(0xab),
                     syndrome: 0
                 },
                 num_pages: 8226,

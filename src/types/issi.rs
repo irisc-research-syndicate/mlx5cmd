@@ -1,7 +1,5 @@
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -19,8 +17,6 @@ pub struct QueryISSIOutput {
 
     pub supported_issi: [u8; 0x50],
 }
-
-impl_command_output!(QueryISSIOutput);
 
 impl Command for QueryISSI {
     type Output = QueryISSIOutput;
@@ -40,7 +36,6 @@ pub struct SetISSI {
     #[deku(pad_bytes_before = "8", pad_bytes_after = "4")]
     pub current_issi: u16,
 }
-impl_command_output!(SetISSIOutput);
 
 impl Command for SetISSI {
     type Output = SetISSIOutput;
@@ -64,6 +59,7 @@ pub struct SetISSIOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::CommandErrorStatus;
 
     #[test]
     fn test_query_issi() {
@@ -91,7 +87,7 @@ mod tests {
             QueryISSIOutput::try_from(output).unwrap(),
             QueryISSIOutput {
                 base: BaseOutput {
-                    status: 0xab,
+                    status: CommandErrorStatus::UnknownError(0xab),
                     syndrome: 0x12345678,
                 },
                 current_issi: 0xaabb,
@@ -125,7 +121,7 @@ mod tests {
             SetISSIOutput::try_from(output).unwrap(),
             SetISSIOutput {
                 base: BaseOutput {
-                    status: 0xab,
+                    status: CommandErrorStatus::UnknownError(0xab),
                     syndrome: 0x12345678,
                 },
             }

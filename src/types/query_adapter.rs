@@ -1,8 +1,6 @@
 use deku::ctx::Endian;
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -18,8 +16,6 @@ pub struct QueryAdapterOutput {
 
     pub query_adapter: QueryAdapterStruct,
 }
-
-impl_command_output!(QueryAdapterOutput);
 
 impl Command for QueryAdapter {
     type Output = QueryAdapterOutput;
@@ -46,6 +42,7 @@ pub struct QueryAdapterStruct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::CommandErrorStatus;
 
     #[test]
     fn test_query_adapter() {
@@ -65,7 +62,7 @@ mod tests {
 
         let out = QueryAdapterOutput {
             base: BaseOutput {
-                status: 0xab,
+                status: CommandErrorStatus::UnknownError(0xab),
                 syndrome: 0x12345678,
             },
             query_adapter,

@@ -1,8 +1,6 @@
 use deku::ctx::Endian;
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -29,8 +27,6 @@ pub struct ManagePagesOutput {
     pub items: Vec<u64>,
 }
 
-impl_command_output!(ManagePagesOutput);
-
 impl Command for ManagePages {
     type Output = ManagePagesOutput;
 
@@ -54,6 +50,7 @@ pub enum ManagePagesOpMod {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::CommandErrorStatus;
 
     #[test]
     fn test_manage_pages() {
@@ -87,7 +84,7 @@ mod tests {
             ManagePagesOutput::try_from(output).unwrap(),
             ManagePagesOutput {
                 base: BaseOutput {
-                    status: 0xab,
+                    status: CommandErrorStatus::UnknownError(0xab),
                     syndrome: 0x12345678,
                 },
                 output_num_entries: 3,

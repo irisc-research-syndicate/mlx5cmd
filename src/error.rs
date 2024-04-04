@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::types::CommandErrorStatus;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("ioerror")]
@@ -13,6 +15,11 @@ pub enum Error {
 
     #[error("Could not serialize command")]
     Deku(#[from] deku::error::DekuError),
-}
 
+    #[error("Command error: status={status} syndrome={syndrome}")]
+    Command {
+        status: CommandErrorStatus,
+        syndrome: u32,
+    },
+}
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,7 +1,5 @@
 use deku::prelude::*;
 
-use crate::impl_command_output;
-
 use super::{BaseOutput, Command};
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -20,8 +18,6 @@ pub struct ExecShellcodeOutput {
     pub results: [u32; 6],
     pub shellcode: [u8; 0xa0],
 }
-
-impl_command_output!(ExecShellcodeOutput);
 
 impl Command for ExecShellcode {
     type Output = ExecShellcodeOutput;
