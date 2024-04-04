@@ -1,3 +1,4 @@
+pub mod access_register;
 pub mod exec_shellcode;
 pub mod hca;
 pub mod issi;
