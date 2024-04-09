@@ -1,6 +1,6 @@
 #![allow(unused_variables)]
 
-use std::{fmt::Debug, path::PathBuf};
+use std::{fmt::Debug, io::Write, path::PathBuf};
 
 use clap::Parser;
 #[allow(unused_imports)]
@@ -11,7 +11,9 @@ use crate::{
     error::Result,
     mlx::Mlx5CmdIf,
     types::{
-        EnableHCA, ExecShellcode, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI,
+        access_register::{MtrcCapReg, MtrcStdbReg},
+        EnableHCA, ExecShellcode, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages,
+        SetISSI,
     },
 };
 
@@ -42,15 +44,14 @@ fn main() -> Result<()> {
     pci_device.reset()?;
 
     let cmdif = Mlx5CmdIf::new(pci_device)?;
-    dbg!(cmdif.do_command(EnableHCA(()))?);
-    dbg!(cmdif.do_command(QueryISSI(()))?);
+    cmdif.do_command(EnableHCA(()))?;
+    cmdif.do_command(QueryISSI(()))?;
 
     let out = cmdif.do_command(SetISSI { current_issi: 1 })?;
 
     let query_boot_pages = cmdif.do_command(QueryPages {
         op_mod: types::QueryPagesOpMod::BootPages,
     })?;
-    dbg!(&query_boot_pages);
 
     let mut available_page = 0x00000000_11000000_u64;
     let mut pages = vec![];
@@ -84,6 +85,43 @@ fn main() -> Result<()> {
 
     cmdif.do_command(manage_pages_cmd)?;
     cmdif.do_command(InitHCA(()))?;
+
+    let mtrc_cap_reg = dbg!(cmdif.read_register(MtrcCapReg::default(), 0)?);
+
+    let mut stdbs = vec![];
+
+    struct StringDB {
+        num: u8,
+        address: u32,
+        data: Vec<u8>,
+    }
+
+    for stdb_num in 0..mtrc_cap_reg.num_string_db {
+        let mut stdb = StringDB {
+            num: stdb_num,
+            address: mtrc_cap_reg.string_db_param[stdb_num as usize].address,
+            data: vec![],
+        };
+
+        for offset in (0..mtrc_cap_reg.string_db_param[stdb_num as usize].size).step_by(64) {
+            let stdb_reg = cmdif.read_register(
+                MtrcStdbReg {
+                    index: stdb_num,
+                    size: 64,
+                    offset,
+                    data: [0u8; 64],
+                },
+                0,
+            )?;
+
+            stdb.data.extend_from_slice(&stdb_reg.data);
+        }
+        let mut stdb_file =
+            std::fs::File::create(format!("stdb.{}.{:#010x}", stdb.num, stdb.address))?;
+        stdb_file.write_all(&stdb.data)?;
+
+        stdbs.push(stdb);
+    }
 
     let mut shellcode = [0u8; 0xa0];
     shellcode[..SHELLCODE.len()].copy_from_slice(SHELLCODE);

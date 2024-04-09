@@ -5,7 +5,10 @@ use crate::{
     error::{Error, Result},
     init::InitSegment,
     mailbox::MailboxAllocator,
-    types::{BaseOutputStatus, Command, CommandErrorStatus},
+    types::{
+        access_register::{AccessRegister, AccessRegisterOpMod, Register},
+        BaseOutputStatus, Command, CommandErrorStatus,
+    },
 };
 use deku::DekuContainerRead;
 use pci_driver::{
@@ -108,7 +111,6 @@ impl<'a> Mlx5CmdIf<'a> {
 
         while cmd.status().read()? & 0x01 != 0x00 {
             log::trace!("Waiting for command status");
-            sleep(Duration::from_millis(100));
         }
         let err = cmd.status().read()? >> 1;
         if err != 0x00 {
@@ -144,6 +146,16 @@ impl<'a> Mlx5CmdIf<'a> {
         let res = Cmd::Output::from_bytes((&out, 0))?.1;
         log::debug!("output: {res:?}");
         Ok(res)
+    }
+
+    pub fn read_register<Reg: Register + Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
+        let resp = self.do_command(AccessRegister {
+            op_mod: AccessRegisterOpMod::Read,
+            argument,
+            register_id: Reg::REGISTER_ID,
+            register_data: reg.to_bytes()?,
+        })?;
+        Ok(Reg::from_bytes((&resp.register_data, 0))?.1)
     }
 }
 
