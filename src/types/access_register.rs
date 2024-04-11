@@ -200,7 +200,7 @@ mod tests {
                     status: CommandErrorStatus::UnknownError(0xab),
                     syndrome: 0,
                 },
-                register_data: vec![0x87654321, 0x0, u32::MAX],
+                register_data: [0xff; 128],
             }
         );
     }
