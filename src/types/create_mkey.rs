@@ -20,7 +20,7 @@ pub struct MKey {
     lw: bool,
     lr: bool,
 
-    access_mode: u8,
+    access_mode: AccessMode,
     /// 24 bits
     qpn: u32,
     mkey: u8,
