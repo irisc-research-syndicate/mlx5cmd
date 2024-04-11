@@ -1,4 +1,5 @@
 pub mod access_register;
+pub mod create_mkey;
 pub mod exec_shellcode;
 pub mod hca;
 pub mod issi;
