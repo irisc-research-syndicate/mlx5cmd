@@ -9,6 +9,7 @@ pub struct ManagePages {
     #[deku(pad_bytes_before = "4", pad_bytes_after = "4")]
     pub op_mod: ManagePagesOpMod,
 
+    #[deku(update = "self.items.len() as u32")]
     pub input_num_entries: u32,
 
     #[deku(count = "input_num_entries")]
@@ -35,7 +36,11 @@ impl Command for ManagePages {
     }
 
     fn outlen(&self) -> usize {
-        0x10 + self.items.len() * 8
+        match self.op_mod {
+            ManagePagesOpMod::AllocationFail => 0x10,
+            ManagePagesOpMod::AllocationSuccess => 0x10,
+            ManagePagesOpMod::HCAReturnPages => 0x10 + self.items.len() * 8,
+        }
     }
 }
 
