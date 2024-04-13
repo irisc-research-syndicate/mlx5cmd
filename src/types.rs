@@ -8,6 +8,7 @@ pub mod query_adapter;
 pub mod query_hca_cap;
 pub mod query_pages;
 pub mod set_driver_version;
+pub mod alloc_pd;
 
 pub use exec_shellcode::*;
 pub use hca::*;
@@ -17,6 +18,7 @@ pub use query_adapter::*;
 pub use query_hca_cap::*;
 pub use query_pages::*;
 pub use set_driver_version::*;
+pub use alloc_pd::*;
 use thiserror::Error;
 
 use std::fmt::Debug;
