@@ -8,14 +8,12 @@ use dbg_hex::dbg_hex;
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 
 use crate::{
-    error::Result,
-    mlx::Mlx5CmdIf,
-    types::{
-        access_register::{MtrcCapReg, MtrcStdbReg},
-        EnableHCA, ExecShellcode, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages,
-        SetISSI,
-    },
+    error::Result, mlx::Mlx5CmdIf
 };
+use crate::types::{
+    create_mkey::{AccessMode, CreateMKey, MKeyContext}, AllocPD, EnableHCA, ExecShellcode, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI
+};
+use crate::registers::mtrc::{MtrcCapReg, MtrcConfReg};
 
 pub mod cqe;
 pub mod error;
@@ -87,51 +85,89 @@ fn main() -> Result<()> {
     cmdif.do_command(manage_pages_cmd)?;
     cmdif.do_command(InitHCA(()))?;
 
-    let mtrc_cap_reg = dbg!(cmdif.read_register(MtrcCapReg::default(), 0)?);
+    //let mtrc_cap_reg = dbg!(cmdif.read_register(MtrcCapReg::default(), 0)?);
 
-    let mut stdbs = vec![];
+    //let mut stdbs = vec![];
 
-    struct StringDB {
-        num: u8,
-        address: u32,
-        data: Vec<u8>,
-    }
+    //struct StringDB {
+    //    num: u8,
+    //    address: u32,
+    //    data: Vec<u8>,
+    //}
 
-    for stdb_num in 0..mtrc_cap_reg.num_string_db {
-        let mut stdb = StringDB {
-            num: stdb_num,
-            address: mtrc_cap_reg.string_db_param[stdb_num as usize].address,
-            data: vec![],
-        };
+    //for stdb_num in 0..mtrc_cap_reg.num_string_db {
+    //    let mut stdb = StringDB {
+    //        num: stdb_num,
+    //        address: mtrc_cap_reg.string_db_param[stdb_num as usize].address,
+    //        data: vec![],
+    //    };
 
-        for offset in (0..mtrc_cap_reg.string_db_param[stdb_num as usize].size).step_by(64) {
-            let stdb_reg = cmdif.read_register(
-                MtrcStdbReg {
-                    index: stdb_num,
-                    size: 64,
-                    offset,
-                    data: [0u8; 64],
-                },
-                0,
-            )?;
+    //    for offset in (0..mtrc_cap_reg.string_db_param[stdb_num as usize].size).step_by(64) {
+    //        let stdb_reg = cmdif.read_register(
+    //            MtrcStdbReg {
+    //                index: stdb_num,
+    //                size: 64,
+    //                offset,
+    //                data: [0u8; 64],
+    //            },
+    //            0,
+    //        )?;
 
-            stdb.data.extend_from_slice(&stdb_reg.data);
-        }
-        let mut stdb_file =
-            std::fs::File::create(format!("stdb.{}.{:#010x}", stdb.num, stdb.address))?;
-        stdb_file.write_all(&stdb.data)?;
+    //        stdb.data.extend_from_slice(&stdb_reg.data);
+    //    }
+    //    let mut stdb_file =
+    //        std::fs::File::create(format!("stdb.{}.{:#010x}", stdb.num, stdb.address))?;
+    //    stdb_file.write_all(&stdb.data)?;
 
-        stdbs.push(stdb);
-    }
+    //    stdbs.push(stdb);
+    //}
+    let trace_pd = dbg!(cmdif.do_command(AllocPD{})?).pd;
 
-    let mut shellcode = [0u8; 0xa0];
-    shellcode[..SHELLCODE.len()].copy_from_slice(SHELLCODE);
+    let trace_mkey_index = dbg_hex!(cmdif.do_command(CreateMKey {
+        pg_access: false,
+        umem_valid: false,
+        context: MKeyContext {
+            free: false,
+            umr_en: false,
+            rw: false,
+            rr: false,
+            lw: true,
+            lr: true,
+            access_mode: AccessMode::MTT,
+            qpn: 0xffffff,
+            mkey: 0x0c,
+            length64: false,
+            pd: trace_pd,
+            start_addr: 0x00000000_10800000,
+            len: 0x00000000_00002000,
+            translation_octword_size: 1,
+            log_entry_size: 12,
+        },
+        translation_octwords_actual_size: 1,
+        translation_entries: vec![
+            0x00000000_10800000, 0x000000000_10801000
+        ],
+    })?).mkey_index;
 
-    dbg!(cmdif.do_command(ExecShellcode {
-        op_mod: 0x0000,
-        args: [0, 0, 0, 0, 0, 0],
-        shellcode,
-    })?);
+    dbg_hex!(cmdif.write_register(MtrcCapReg {
+        trace_owner: true,
+        ..Default::default()
+    }, 0)?);
+
+    dbg_hex!(cmdif.write_register(MtrcConfReg {
+        trace_mode: 1,
+        trace_mkey: (trace_mkey_index << 8) | 0x0c,
+        log_trace_buffer_size: 6,
+    }, 0))?;
+
+    //let mut shellcode = [0u8; 0xa0];
+    //shellcode[..SHELLCODE.len()].copy_from_slice(SHELLCODE);
+
+    //dbg_hex!(cmdif.do_command(ExecShellcode {
+    //    op_mod: 0x0000,
+    //    args: [0, 0, 0, 0, 0, 0],
+    //    shellcode,
+    //})?);
 
     Ok(())
 }
