@@ -23,6 +23,7 @@ pub mod init;
 pub mod mailbox;
 pub mod mlx;
 pub mod types;
+pub mod registers;
 
 #[derive(Parser, Debug)]
 struct CliArgs {
