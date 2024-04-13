@@ -1,14 +1,10 @@
 use std::{fmt::Debug, thread::sleep, time::Duration};
 
 use crate::{
-    cqe::CQE,
-    error::{Error, Result},
-    init::InitSegment,
-    mailbox::MailboxAllocator,
-    types::{
-        access_register::{AccessRegister, AccessRegisterOpMod, Register},
+    cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator, registers::Register, types::{
+        access_register::{AccessRegister, AccessRegisterOpMod},
         BaseOutputStatus, Command, CommandErrorStatus,
-    },
+    }
 };
 use deku::DekuContainerRead;
 use pci_driver::{
@@ -128,6 +124,7 @@ impl<'a> Mlx5CmdIf<'a> {
             output.extend_from_slice(&chunk[..]);
         }
         output.resize(outlen as usize, 0);
+        log::debug!("Output={output:02x?}");
 
         Ok(output)
     }
@@ -157,6 +154,17 @@ impl<'a> Mlx5CmdIf<'a> {
         })?;
         Ok(Reg::from_bytes((&resp.register_data, 0))?.1)
     }
+
+    pub fn write_register<Reg: Register + Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
+        let resp = self.do_command(AccessRegister {
+            op_mod: AccessRegisterOpMod::Write,
+            argument,
+            register_id: Reg::REGISTER_ID,
+            register_data: reg.to_bytes()?,
+        })?;
+        Ok(Reg::from_bytes((&resp.register_data, 0))?.1)
+    }
+
 }
 
 fn iommu_map(
