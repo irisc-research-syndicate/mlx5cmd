@@ -95,7 +95,7 @@ fn main() -> Result<()> {
             op_mod: 0x0000,
             args: [0, 0, 0, 0, 0, 0],
             shellcode,
-        })?);
+        })?.results);
     }
 
     Ok(())
