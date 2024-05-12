@@ -29,7 +29,7 @@ pub struct CreateMKeyOutput {
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
-#[deku(endian = "ctx_endian", ctx = "ctx_endian: Endian, ctx_bytes: ByteSize")]
+#[deku(endian = "ctx_endian", ctx = "ctx_endian: Endian, _ctx_bytes: ByteSize")]
 pub struct MKeyContext {
     #[deku(pad_bits_before = "1", bits = "1")]
     pub free: bool,
@@ -79,7 +79,7 @@ impl Command for CreateMKey {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone, DekuRead, DekuWrite)]
-#[deku(type = "u8", bits = "2", endian = "ctx_endian", ctx = "ctx_endian: Endian, ctx_bits: BitSize")]
+#[deku(type = "u8", bits = "2", endian = "ctx_endian", ctx = "ctx_endian: Endian, _ctx_bits: BitSize")]
 pub enum AccessMode {
     PA = 0,
     MTT = 1,
