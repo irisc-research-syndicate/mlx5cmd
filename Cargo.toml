@@ -14,4 +14,8 @@ irisc-asm = { git = "ssh://git@github.com/irisc-research-syndicate/irisc-asm.git
 libc = "0.2.153"
 log = "0.4.21"
 pci-driver = "0.1.4"
+serde = { version = "1.0.201", features = ["derive"] }
+serde_as = "0.0.1"
+serde_json = "1.0.117"
+serde_with = "3.8.1"
 thiserror = "1.0.58"
