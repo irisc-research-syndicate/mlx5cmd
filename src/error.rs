@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::types::CommandErrorStatus;
+use crate::commands::CommandErrorStatus;
 
 #[derive(Error, Debug)]
 pub enum Error {

@@ -1,7 +1,7 @@
 use std::{fmt::Debug, thread::sleep, time::Duration};
 
 use crate::{
-    cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator, registers::Register, types::{
+    cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator, registers::Register, commands::{
         access_register::{AccessRegister, AccessRegisterOpMod},
         BaseOutputStatus, Command, CommandErrorStatus,
     }
