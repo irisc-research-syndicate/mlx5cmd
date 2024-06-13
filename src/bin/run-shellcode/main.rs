@@ -6,14 +6,14 @@ use std::time::SystemTime;
 use std::{fmt::Debug, path::PathBuf};
 
 use clap::Parser;
-use mlx5cmd::types::{ManagePagesOpMod, QueryPagesOpMod};
+use mlx5cmd::types::{ExecShellcode64, ManagePagesOpMod, QueryPagesOpMod};
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 
 use mlx5cmd::{
     error::Result, mlx::Mlx5CmdIf
 };
 use mlx5cmd::types::{
-    EnableHCA, ExecShellcode, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI
+    EnableHCA, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI
 };
 
 use irisc_asm::assemble_template;
@@ -53,8 +53,8 @@ struct ExperimentData {
     #[serde_as(as = "serde_with::hex::Hex")]
     shellcode: Vec<u8>,
     parameters: BTreeMap<String, u64>,
-    arguments: [u32; 6],
-    results: [u32; 6],
+    arguments: [u64; 3],
+    results: [u64; 3],
     execution_time: u128,
     assembly_time: u128,
     total_time: u128,
@@ -64,7 +64,6 @@ struct ExperimentData {
 fn main() -> Result<()> {
     env_logger::init();
     let args = CliArgs::parse();
-
 
     let pci_device = VfioPciDevice::open(args.device)?;
     pci_device.reset()?;
@@ -150,9 +149,9 @@ fn main() -> Result<()> {
 
         let execution_start_time = std::time::SystemTime::now();
 
-        let exec_output = cmdif.do_command(ExecShellcode {
+        let exec_output = cmdif.do_command(ExecShellcode64 {
             op_mod: 0x0000,
-            args: [0, 0, 0, 0, 0, 0],
+            args: [0, 0, 0],
             shellcode,
         })?;
 
@@ -165,7 +164,7 @@ fn main() -> Result<()> {
         output_json(&mut output, &ExperimentData {
             parameters: parameters,
             shellcode: code,
-            arguments: [0; 6],
+            arguments: [0; 3],
             results: exec_output.results,
             execution_time,
             assembly_time,
