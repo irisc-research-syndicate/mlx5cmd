@@ -31,6 +31,37 @@ impl Command for ExecShellcode {
     }
 }
 
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big", magic = b"\x09\x32")]
+pub struct ExecShellcode64 {
+    #[deku(pad_bytes_before = "4")]
+    pub op_mod: u16,
+    pub args: [u64; 3],
+    pub shellcode: [u8; 0xa0]
+}
+
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big")]
+pub struct ExecShellcode64Output {
+    pub base: BaseOutput,
+    pub results: [u64; 3],
+    pub shellcode: [u8; 0xa0],
+}
+
+impl Command for ExecShellcode64 {
+    type Output = ExecShellcode64Output;
+
+    fn size(&self) -> usize {
+        0xc0
+    }
+
+    fn outlen(&self) -> usize {
+        0xc0
+    }
+}
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
