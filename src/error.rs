@@ -21,5 +21,8 @@ pub enum Error {
         status: CommandErrorStatus,
         syndrome: u32,
     },
+
+    #[error("Out of memory")]
+    OutOfMemory,
 }
 pub type Result<T> = std::result::Result<T, Error>;

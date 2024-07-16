@@ -1,29 +1,35 @@
 use std::{fmt::Debug, thread::sleep, time::Duration};
 
 use crate::{
-    cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator, registers::Register, commands::{
-        access_register::{AccessRegister, AccessRegisterOpMod},
-        BaseOutputStatus, Command, CommandErrorStatus,
-    }
+    allocator::{AllocationGuard, Allocator}, commands::{
+        access_register::{AccessRegister, AccessRegisterOpMod}, BaseOutputStatus, Command, CommandErrorStatus, ManagePages, ManagePagesOpMod, QueryPages, QueryPagesOpMod
+    }, cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator, registers::Register
 };
 use deku::DekuContainerRead;
 use pci_driver::{
     backends::vfio::VfioPciDevice,
     device::PciDevice,
     regions::{
-        AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, PciRegion,
-        Permissions,
+        AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, PciRegion, Permissions
     },
 };
 
+use crate::commands::{
+    SetISSI, EnableHCA, QueryISSI, QueryHCACap, InitHCA
+};
+
 #[allow(dead_code)]
-pub struct Mlx5CmdIf<'a> {
+pub struct Mlx5CmdIf {
     pci_device: VfioPciDevice,
     bar0_region: MappedOwningPciRegion,
-    dma_region: PciMemoryRegion<'a>,
+    dma_allocator: Allocator,
+    cqe_region: AllocationGuard,
+    managed_pages: Vec<AllocationGuard>,
 }
 
-impl<'a> Mlx5CmdIf<'a> {
+const DMA_PAGES: usize = 32768;
+
+impl Mlx5CmdIf {
     pub fn new(pci_device: VfioPciDevice) -> Result<Self> {
         pci_device
             .config()
@@ -32,20 +38,65 @@ impl<'a> Mlx5CmdIf<'a> {
             .write(true)?;
         let bar0 = pci_device.bar(0).ok_or(Error::Bar0)?;
         let bar0_region = bar0.map(..bar0.len(), Permissions::ReadWrite)?;
-        let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, 0x8000000)?;
+        let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, DMA_PAGES << 12)?;
+        let dma_allocator: Allocator = Allocator::new(dma_region, 0x1000);
+        let cqe_region: AllocationGuard = dma_allocator.alloc(1).unwrap();
+        let cqe_ptr = cqe_region.as_ptr().unwrap() as u64;
 
         let this = Self {
             pci_device,
             bar0_region,
-            dma_region,
+            dma_allocator,
+            cqe_region,
+            managed_pages: vec![],
         };
-        this.setup_cmdq_phy_addr(0x10000000_u64)?;
+        this.setup_cmdq_phy_addr(cqe_ptr)?;
 
         Ok(this)
     }
 
-    pub fn iommu_map(&self, iova: u64, length: usize) -> Result<PciMemoryRegion<'a>> {
-        iommu_map(&self.pci_device.iommu(), iova, length)
+    pub fn initialize(&mut self) -> Result<()> {
+        self.do_command(EnableHCA(()))?;
+        self.do_command(QueryISSI(()))?;
+        self.do_command(SetISSI { current_issi: 1 })?;
+
+        let query_boot_pages = self.do_command(QueryPages {
+            op_mod: QueryPagesOpMod::BootPages,
+        })?;
+
+        let mut pages = vec![];
+        for _ in 0x00..query_boot_pages.num_pages {
+            let page = self.dma_allocator.alloc(1).unwrap();
+            pages.push(page.as_ptr().unwrap() as u64);
+            self.managed_pages.push(page)
+        }
+        self.do_command(ManagePages {
+            op_mod: ManagePagesOpMod::AllocationSuccess,
+            input_num_entries: query_boot_pages.num_pages as u32,
+            items: pages,
+        })?;
+
+        self.do_command(QueryHCACap { op_mod: 0x0001 })?;
+
+        let query_init_pages = self.do_command(QueryPages {
+            op_mod: QueryPagesOpMod::InitPages,
+        })?;
+
+        let mut pages = vec![];
+        for _ in 0x00..query_init_pages.num_pages {
+            let page = self.dma_allocator.alloc(1).unwrap();
+            pages.push(page.as_ptr().unwrap() as u64);
+            self.managed_pages.push(page)
+        }
+        self.do_command(ManagePages {
+            op_mod: ManagePagesOpMod::AllocationSuccess,
+            input_num_entries: query_init_pages.num_pages as u32,
+            items: pages,
+        })?;
+
+        self.do_command(InitHCA(()))?;
+        
+        Ok(())
     }
 
     pub fn init_segment(&self) -> InitSegment {
@@ -69,8 +120,9 @@ impl<'a> Mlx5CmdIf<'a> {
 
     pub fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
         log::debug!("Executing command input={input:02x?} outlen={outlen}");
-        let cmd = CQE::backed_by((&self.dma_region).subregion(0x000..0x400));
-        let mut mailbox_allocator = MailboxAllocator::new((&self.dma_region).subregion(0x1000..));
+        let cmd = CQE::backed_by(&*self.cqe_region);
+        let mailbox_region = self.dma_allocator.alloc(256).unwrap();
+        let mut mailbox_allocator = MailboxAllocator::new((&*mailbox_region).subregion(..));
 
         cmd.cmd_type().write(0x07)?;
 

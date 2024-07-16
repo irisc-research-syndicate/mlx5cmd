@@ -42,7 +42,7 @@ pub struct QueryAdapterStruct {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::CommandErrorStatus;
+    use crate::commands::CommandErrorStatus;
 
     #[test]
     fn test_query_adapter() {

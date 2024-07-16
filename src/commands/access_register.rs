@@ -48,7 +48,7 @@ impl Command for AccessRegister {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::CommandErrorStatus;
+    use crate::commands::CommandErrorStatus;
 
     use super::*;
 
