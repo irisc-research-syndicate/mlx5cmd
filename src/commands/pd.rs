@@ -28,4 +28,27 @@ impl Command for AllocPD {
     }
 }
 
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big", magic = b"\x08\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")]
+pub struct DeallocPD {
+    #[deku(pad_bits_before = "8", bits = "24")]
+    pd: u32
+}
 
+#[derive(Debug, PartialEq, DekuRead, DekuWrite)]
+#[deku(endian = "big")]
+pub struct DeallocPDOutput {
+    pub base: BaseOutput,
+}
+
+impl Command for DeallocPD {
+    type Output = DeallocPDOutput;
+
+    fn size(&self) -> usize {
+        0x10
+    }
+
+    fn outlen(&self) -> usize {
+        0x10
+    }
+}

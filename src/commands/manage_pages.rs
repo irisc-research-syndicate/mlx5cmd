@@ -39,7 +39,7 @@ impl Command for ManagePages {
         match self.op_mod {
             ManagePagesOpMod::AllocationFail => 0x10,
             ManagePagesOpMod::AllocationSuccess => 0x10,
-            ManagePagesOpMod::HCAReturnPages => 0x10 + self.items.len() * 8,
+            ManagePagesOpMod::HCAReturnPages => 0x10 + (self.input_num_entries as usize)* 8,
         }
     }
 }
