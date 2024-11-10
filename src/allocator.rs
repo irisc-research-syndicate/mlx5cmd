@@ -1,22 +1,22 @@
 use std::{ops::Deref, sync::{Arc, Mutex}};
 
-use log::debug;
+use log::{debug, trace};
 use xalloc::{BitmapAlloc,BitmapAllocRegion};
 use pci_driver::regions::{PciMemoryRegion, PciRegion, Permissions};
 
 pub struct AllocatorInner {
-    allocator: BitmapAlloc,
-    granularity: usize,
-    memory: PciMemoryRegion<'static>,
+    pub allocator: BitmapAlloc,
+    pub granularity: usize,
+    pub memory: PciMemoryRegion<'static>,
 }
 
 #[derive(Clone)]
-pub struct Allocator(Arc<Mutex<AllocatorInner>>);
+pub struct Allocator(pub Arc<Mutex<AllocatorInner>>);
 
 pub struct AllocationGuard {
-    allocator: Allocator,
-    region: Option<BitmapAllocRegion>,
-    memory: PciMemoryRegion<'static>,
+    pub allocator: Allocator,
+    pub region: Option<BitmapAllocRegion>,
+    pub memory: PciMemoryRegion<'static>,
 }
 
 impl Allocator {
@@ -38,7 +38,7 @@ impl Allocator {
                 Permissions::ReadWrite
             ) };
 
-            debug!("Allocated {} pages at {:?}", size, memory.as_ptr().unwrap());
+            trace!("Allocated {} pages at {:?}", size, memory.as_ptr().unwrap());
 
             Some(AllocationGuard {
                 allocator: self.clone(),
@@ -54,7 +54,7 @@ impl Allocator {
 impl Drop for AllocationGuard {
     fn drop(&mut self) {
         let mut allocator = self.allocator.0.lock().unwrap();
-        debug!("Deallocating {:?}", self.memory.as_ptr().unwrap());
+        trace!("Deallocating {:?}", self.memory.as_ptr().unwrap());
         if let Some(region) = self.region.take(){
             allocator.allocator.dealloc_relaxed(region);
         }

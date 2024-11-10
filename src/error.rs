@@ -24,5 +24,11 @@ pub enum Error {
 
     #[error("Out of memory")]
     OutOfMemory,
+
+    #[error("Could not find PCI capability")]
+    CapabilityNotFound,
+
+    #[error["Invalid MTCR address space"]]
+    InvalidAddressSpace
 }
 pub type Result<T> = std::result::Result<T, Error>;

@@ -6,14 +6,11 @@ use std::time::SystemTime;
 use std::{fmt::Debug, path::PathBuf};
 
 use clap::Parser;
-use mlx5cmd::commands::{ExecShellcode64, ManagePagesOpMod, QueryPagesOpMod};
+use mlx5cmd::commands::ExecShellcode64;
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 
 use mlx5cmd::{
     error::Result, mlx::Mlx5CmdIf
-};
-use mlx5cmd::commands::{
-    EnableHCA, InitHCA, ManagePages, QueryHCACap, QueryISSI, QueryPages, SetISSI
 };
 
 use irisc_asm::assemble_template;

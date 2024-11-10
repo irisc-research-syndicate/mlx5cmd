@@ -1,11 +1,13 @@
-use std::{fmt::Debug, thread::sleep, time::Duration};
+use std::{collections::HashMap, fmt::Debug, thread::sleep, time::Duration};
 
 use crate::{
     allocator::{AllocationGuard, Allocator}, commands::{
-        access_register::{AccessRegister, AccessRegisterOpMod}, BaseOutputStatus, Command, CommandErrorStatus, ManagePages, ManagePagesOpMod, QueryPages, QueryPagesOpMod
+        access_register::{AccessRegister, AccessRegisterOpMod}, BaseOutputStatus, Command, CommandErrorStatus, ExecShellcode64, ManagePages, ManagePagesOpMod, QueryPages, QueryPagesOpMod
     }, cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator, registers::Register
 };
 use deku::DekuContainerRead;
+use irisc_asm::assemble;
+use log::{debug, trace};
 use pci_driver::{
     backends::vfio::VfioPciDevice,
     device::PciDevice,
@@ -20,11 +22,11 @@ use crate::commands::{
 
 #[allow(dead_code)]
 pub struct Mlx5CmdIf {
-    pci_device: VfioPciDevice,
-    bar0_region: MappedOwningPciRegion,
-    dma_allocator: Allocator,
-    cqe_region: AllocationGuard,
-    managed_pages: Vec<AllocationGuard>,
+    pub pci_device: VfioPciDevice,
+    pub bar0_region: MappedOwningPciRegion,
+    pub dma_allocator: Allocator,
+    pub cqe_region: AllocationGuard,
+    pub managed_pages: HashMap<u64, AllocationGuard>,
 }
 
 const DMA_PAGES: usize = 32768;
@@ -48,11 +50,51 @@ impl Mlx5CmdIf {
             bar0_region,
             dma_allocator,
             cqe_region,
-            managed_pages: vec![],
+            managed_pages: HashMap::new(),
         };
         this.setup_cmdq_phy_addr(cqe_ptr)?;
 
         Ok(this)
+    }
+
+    pub fn handle_page_request(&mut self, page_type: QueryPagesOpMod) -> Result<()> {
+        let query_pages = self.do_command(QueryPages {
+            op_mod: page_type,
+        })?;
+
+        if query_pages.num_pages > 0 {
+            let mut pages = vec![];
+            debug!("Allocating {} pages for HCA", query_pages.num_pages);
+            for _ in 0..query_pages.num_pages {
+                let page = self.dma_allocator.alloc(1).unwrap();
+                let page_ptr = page.as_ptr().unwrap() as u64;
+                trace!("Allocated {:#x} to HCA", page_ptr);
+                pages.push(page_ptr);
+                self.managed_pages.insert(page_ptr, page);
+            }
+            self.do_command(ManagePages {
+                op_mod: ManagePagesOpMod::AllocationSuccess,
+                input_num_entries: query_pages.num_pages as u32,
+                items: pages,
+            })?;
+        } else if query_pages.num_pages < 0 {
+            debug!("Deallocating {:} pages from HCA", -query_pages.num_pages);
+
+            let manage_pages_out = self.do_command(ManagePages {
+                op_mod: ManagePagesOpMod::HCAReturnPages,
+                input_num_entries: -query_pages.num_pages as u32,
+                items: vec![],
+            })?;
+
+            for page_ptr in manage_pages_out.items {
+                trace!("Deallocated {:#x} from HCA", page_ptr);
+
+                self.managed_pages.remove(&page_ptr);
+            }
+        }
+
+        Ok(())
+
     }
 
     pub fn initialize(&mut self) -> Result<()> {
@@ -60,39 +102,11 @@ impl Mlx5CmdIf {
         self.do_command(QueryISSI(()))?;
         self.do_command(SetISSI { current_issi: 1 })?;
 
-        let query_boot_pages = self.do_command(QueryPages {
-            op_mod: QueryPagesOpMod::BootPages,
-        })?;
-
-        let mut pages = vec![];
-        for _ in 0x00..query_boot_pages.num_pages {
-            let page = self.dma_allocator.alloc(1).unwrap();
-            pages.push(page.as_ptr().unwrap() as u64);
-            self.managed_pages.push(page)
-        }
-        self.do_command(ManagePages {
-            op_mod: ManagePagesOpMod::AllocationSuccess,
-            input_num_entries: query_boot_pages.num_pages as u32,
-            items: pages,
-        })?;
+        self.handle_page_request(QueryPagesOpMod::BootPages)?;
 
         self.do_command(QueryHCACap { op_mod: 0x0001 })?;
 
-        let query_init_pages = self.do_command(QueryPages {
-            op_mod: QueryPagesOpMod::InitPages,
-        })?;
-
-        let mut pages = vec![];
-        for _ in 0x00..query_init_pages.num_pages {
-            let page = self.dma_allocator.alloc(1).unwrap();
-            pages.push(page.as_ptr().unwrap() as u64);
-            self.managed_pages.push(page)
-        }
-        self.do_command(ManagePages {
-            op_mod: ManagePagesOpMod::AllocationSuccess,
-            input_num_entries: query_init_pages.num_pages as u32,
-            items: pages,
-        })?;
+        self.handle_page_request(QueryPagesOpMod::InitPages)?;
 
         self.do_command(InitHCA(()))?;
         
@@ -119,7 +133,7 @@ impl Mlx5CmdIf {
     }
 
     pub fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
-        log::debug!("Executing command input={input:02x?} outlen={outlen}");
+        log::trace!("Executing command input={input:02x?} outlen={outlen}");
         let cmd = CQE::backed_by(&*self.cqe_region);
         let mailbox_region = self.dma_allocator.alloc(256).unwrap();
         let mut mailbox_allocator = MailboxAllocator::new((&*mailbox_region).subregion(..));
@@ -164,7 +178,7 @@ impl Mlx5CmdIf {
         if err != 0x00 {
             return Err(Error::CmdIf(err));
         }
-        log::debug!("Command: {cmd:?}");
+        log::trace!("Command: {cmd:?}");
 
         let mut output = vec![];
         for i in 0x00..0x10 {
@@ -176,12 +190,13 @@ impl Mlx5CmdIf {
             output.extend_from_slice(&chunk[..]);
         }
         output.resize(outlen as usize, 0);
-        log::debug!("Output={output:02x?}");
+        log::trace!("Output={output:02x?}");
 
         Ok(output)
     }
 
     pub fn do_command<Cmd: Command + Debug>(&self, cmd: Cmd) -> Result<Cmd::Output> {
+        log::debug!("Command: {cmd:x?}");
         let msg = cmd.to_bytes()?;
         let out = self.exec_command(&msg, cmd.outlen() as u32)?;
         let base_output = BaseOutputStatus::from_bytes((&out, 0))?.1;
@@ -193,30 +208,50 @@ impl Mlx5CmdIf {
         }
 
         let res = Cmd::Output::from_bytes((&out, 0))?.1;
-        log::debug!("output: {res:?}");
+        log::debug!("Output: {res:x?}");
         Ok(res)
     }
+}
 
+impl Mlx5CmdIf {
     pub fn read_register<Reg: Register + Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
+        log::debug!("Reading register {reg:x?}");
         let resp = self.do_command(AccessRegister {
             op_mod: AccessRegisterOpMod::Read,
             argument,
             register_id: Reg::REGISTER_ID,
             register_data: reg.to_bytes()?,
         })?;
-        Ok(Reg::from_bytes((&resp.register_data, 0))?.1)
+        let reg = Reg::from_bytes((&resp.register_data, 0))?.1;
+        log::debug!("Register value: {reg:x?}");
+        Ok(reg)
     }
 
     pub fn write_register<Reg: Register + Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
+        log::debug!("Writing register {reg:x?}");
         let resp = self.do_command(AccessRegister {
             op_mod: AccessRegisterOpMod::Write,
             argument,
             register_id: Reg::REGISTER_ID,
             register_data: reg.to_bytes()?,
         })?;
-        Ok(Reg::from_bytes((&resp.register_data, 0))?.1)
+        let reg = Reg::from_bytes((&resp.register_data, 0))?.1;
+        log::debug!("Register value after write {reg:x?}");
+        Ok(reg)
     }
+}
 
+impl Mlx5CmdIf {
+    pub fn run_shellcode(&self, shellcode: &str) -> anyhow::Result<[u64;3]> {
+        let (code, _labels) = assemble(0, shellcode)?;
+        let mut shellcode = [0u8; 0xa0];
+        shellcode[..code.len()].copy_from_slice(&code);
+        Ok(self.do_command(ExecShellcode64{
+            op_mod: 0,
+            args: [0, 0, 0],
+            shellcode,
+        })?.results)
+    }
 }
 
 fn iommu_map(
