@@ -8,7 +8,7 @@ use mlx5cmd::{cmdif::CmdIf, commands::{EnableHCA, InitHCA, ManagePages, ManagePa
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice, regions::PciRegion};
 
 use mlx5cmd::{
-    error::Result, cmdif::vfio::Mlx5CmdIf
+    error::Result, cmdif::vfio::VfioCmdIf
 };
 
 #[derive(Parser, Debug)]
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     let pci_device = VfioPciDevice::open(args.device)?;
     pci_device.reset()?;
 
-    let cmdif = Mlx5CmdIf::new(pci_device)?;
+    let cmdif = VfioCmdIf::new(pci_device)?;
     cmdif.do_command(EnableHCA(()))?;
     cmdif.do_command(QueryISSI(()))?;
     cmdif.do_command(SetISSI { current_issi: 1 })?;

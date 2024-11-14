@@ -1,5 +1,5 @@
 use pci_driver::{config::{caps::Capability, PciConfig}, device::PciDevice, regions::{AsPciSubregion, PciRegion, PciSubregion}};
-use crate::{error::{Error, Result}, cmdif::vfio::Mlx5CmdIf};
+use crate::{error::{Error, Result}, cmdif::vfio::VfioCmdIf};
 use log::{trace, debug};
 
 pub const AS_ICMD_EXT: u16 = 0x1;
@@ -84,7 +84,7 @@ impl<'a> MTCR<'a> {
         Ok(data)
     }
 
-    pub fn open_from_cmdif(cmdif: &'a Mlx5CmdIf) -> Result<Self> {
+    pub fn open_from_cmdif(cmdif: &'a VfioCmdIf) -> Result<Self> {
         Ok(MTCR { cap_region: find_capability(&cmdif.pci_device.config(), 0x09)? })
     }
 }

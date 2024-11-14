@@ -19,7 +19,7 @@ use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice, regions::PciR
 use dbg_hex::dbg_hex;
 
 use mlx5cmd::{
-    error::Result, cmdif::vfio::Mlx5CmdIf
+    error::Result, cmdif::vfio::VfioCmdIf
 };
 
 #[derive(Parser, Debug)]
@@ -34,7 +34,7 @@ pub fn clear_allocation(allocation: &AllocationGuard) {
     }
 }
 
-pub fn create_mtt_mkey(cmdif: &Mlx5CmdIf, pd: u32, key:u8, pages: usize) -> Result<(u32, AllocationGuard)> {
+pub fn create_mtt_mkey(cmdif: &VfioCmdIf, pd: u32, key:u8, pages: usize) -> Result<(u32, AllocationGuard)> {
     let memory = cmdif.dma_allocator.alloc(pages).unwrap();
     clear_allocation(&memory);
     let mkey_index = cmdif.do_command(CreateMKey {
@@ -68,7 +68,7 @@ pub fn create_mtt_mkey(cmdif: &Mlx5CmdIf, pd: u32, key:u8, pages: usize) -> Resu
     Ok(((mkey_index << 8) | (key as u32), memory))
 }
 
-pub fn create_pa_mkey(cmdif: &Mlx5CmdIf, pd: u32, key: u8, pages: usize) -> Result<(u32, AllocationGuard)> {
+pub fn create_pa_mkey(cmdif: &VfioCmdIf, pd: u32, key: u8, pages: usize) -> Result<(u32, AllocationGuard)> {
     let memory = cmdif.dma_allocator.alloc(pages).unwrap();
     clear_allocation(&memory);
     let mkey_index = dbg!(cmdif.do_command(CreateMKey {
@@ -100,7 +100,7 @@ pub fn create_pa_mkey(cmdif: &Mlx5CmdIf, pd: u32, key: u8, pages: usize) -> Resu
     Ok(((mkey_index << 8) | (key as u32), memory))
 }
 
-pub fn create_eq(cmdif: &Mlx5CmdIf, log_eq_size: u8, event_bitmask: u64) -> Result<(u32, u8, AllocationGuard)> {
+pub fn create_eq(cmdif: &VfioCmdIf, log_eq_size: u8, event_bitmask: u64) -> Result<(u32, u8, AllocationGuard)> {
     let eq_length = 1usize << log_eq_size;
     let eq_size = eq_length * 0x40usize;
     let pages = (eq_size + 0xfff) >> 12;
@@ -137,7 +137,7 @@ fn main() -> anyhow::Result<()> {
 
     let pci_device = VfioPciDevice::open(args.device)?;
     pci_device.reset()?;
-    let mut cmdif = Mlx5CmdIf::new(pci_device)?;
+    let mut cmdif = VfioCmdIf::new(pci_device)?;
 
     {
         let mtcr = MTCR::open_from_cmdif(&cmdif)?;

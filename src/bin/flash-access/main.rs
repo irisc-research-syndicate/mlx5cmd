@@ -5,7 +5,7 @@ use clap::Parser;
 use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::registers::flash::MFBA;
 use mlx5cmd::registers::flash::MFPA;
-use mlx5cmd::cmdif::vfio::Mlx5CmdIf;
+use mlx5cmd::cmdif::vfio::VfioCmdIf;
 use pci_driver::backends::vfio::VfioPciDevice;
 use pci_driver::device::PciDevice;
 
@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
 
     let pci_device = VfioPciDevice::open(args.device)?;
     pci_device.reset()?;
-    let mut cmdif = Mlx5CmdIf::new(pci_device)?;
+    let mut cmdif = VfioCmdIf::new(pci_device)?;
 
     cmdif.initialize()?;
 

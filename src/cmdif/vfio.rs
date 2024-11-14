@@ -19,7 +19,7 @@ use crate::commands::{
 };
 
 #[allow(dead_code)]
-pub struct Mlx5CmdIf {
+pub struct VfioCmdIf {
     pub pci_device: VfioPciDevice,
     pub bar0_region: MappedOwningPciRegion,
     pub dma_allocator: Allocator,
@@ -29,7 +29,7 @@ pub struct Mlx5CmdIf {
 
 const DMA_PAGES: usize = 32768;
 
-impl Mlx5CmdIf {
+impl VfioCmdIf {
     pub fn new(pci_device: VfioPciDevice) -> Result<Self> {
         pci_device
             .config()
@@ -131,7 +131,7 @@ impl Mlx5CmdIf {
     }
 }
 
-impl CmdIf for Mlx5CmdIf {
+impl CmdIf for VfioCmdIf {
     fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
         log::trace!("Executing command input={input:02x?} outlen={outlen}");
         let cmd = CQE::backed_by(&*self.cqe_region);

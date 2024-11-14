@@ -11,7 +11,7 @@ use mlx5cmd::commands::ExecShellcode64;
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 
 use mlx5cmd::{
-    error::Result, cmdif::vfio::Mlx5CmdIf
+    error::Result, cmdif::vfio::VfioCmdIf
 };
 
 use irisc_asm::assemble;
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
     let pci_device = VfioPciDevice::open(args.device)?;
     pci_device.reset()?;
 
-    let mut cmdif = Mlx5CmdIf::new(pci_device)?;
+    let mut cmdif = VfioCmdIf::new(pci_device)?;
     cmdif.initialize()?;
 
     let (code, labels) = assemble(0x00000000u32, READMEM_SHELLCODE).unwrap();
