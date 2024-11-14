@@ -1,6 +1,6 @@
 use std::{ops::Deref, sync::{Arc, Mutex}};
 
-use log::{debug, trace};
+use log::trace;
 use xalloc::{BitmapAlloc,BitmapAllocRegion};
 use pci_driver::regions::{PciMemoryRegion, PciRegion, Permissions};
 
