@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::registers::flash::MFBA;
 use mlx5cmd::registers::flash::MFPA;
 use mlx5cmd::mlx::Mlx5CmdIf;

@@ -10,6 +10,7 @@ use clap::Parser;
 use irisc_asm::assemble;
 use log::{debug, info, trace};
 use mlx5cmd::allocator::AllocationGuard;
+use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::commands::QueryEQ;
 use mlx5cmd::{commands::{create_mkey::{AccessMode, CreateMKey, MKeyContext}, AllocPD, AllocUAR, CreateEQ, EQContext, EnableHCA, ExecShellcode64, InitHCA, ManagePages, ManagePagesOpMod, QueryHCACap, QueryISSI, QueryPages, QueryPagesOpMod, SetISSI}, mtcr::{VCR_CMD_ADDR, VCR_CTRL_ADDR}, registers::mtrc::{MtrcCapReg, MtrcConfReg, MtrcCtrlReg}};
 use mlx5cmd::mtcr::{ICmd, AS_CR_SPACE, AS_EXPANSION_ROM, AS_ICMD, AS_ICMD_EXT, AS_NODNIC_INIT_SEG, MTCR};

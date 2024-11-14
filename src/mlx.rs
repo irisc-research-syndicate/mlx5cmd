@@ -1,12 +1,10 @@
-use std::{collections::HashMap, fmt::Debug, thread::sleep, time::Duration};
+use std::{collections::HashMap, thread::sleep, time::Duration};
 
 use crate::{
-    allocator::{AllocationGuard, Allocator}, commands::{
-        access_register::{AccessRegister, AccessRegisterOpMod}, BaseOutputStatus, Command, CommandErrorStatus, ExecShellcode64, ManagePages, ManagePagesOpMod, QueryPages, QueryPagesOpMod
-    }, cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator, registers::Register
+    allocator::{AllocationGuard, Allocator}, cmdif::CmdIf, commands::{
+        ManagePages, ManagePagesOpMod, QueryPages, QueryPagesOpMod
+    }, cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator
 };
-use deku::DekuContainerRead;
-use irisc_asm::assemble;
 use log::{debug, trace};
 use pci_driver::{
     backends::vfio::VfioPciDevice,
@@ -131,8 +129,10 @@ impl Mlx5CmdIf {
 
         Ok(())
     }
+}
 
-    pub fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
+impl CmdIf for Mlx5CmdIf {
+    fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
         log::trace!("Executing command input={input:02x?} outlen={outlen}");
         let cmd = CQE::backed_by(&*self.cqe_region);
         let mailbox_region = self.dma_allocator.alloc(256).unwrap();
@@ -193,64 +193,6 @@ impl Mlx5CmdIf {
         log::trace!("Output={output:02x?}");
 
         Ok(output)
-    }
-
-    pub fn do_command<Cmd: Command + Debug>(&self, cmd: Cmd) -> Result<Cmd::Output> {
-        log::debug!("Command: {cmd:x?}");
-        let msg = cmd.to_bytes()?;
-        let out = self.exec_command(&msg, cmd.outlen() as u32)?;
-        let base_output = BaseOutputStatus::from_bytes((&out, 0))?.1;
-        if base_output.0.status != CommandErrorStatus::Ok {
-            return Err(Error::Command {
-                status: base_output.0.status,
-                syndrome: base_output.0.syndrome,
-            });
-        }
-
-        let res = Cmd::Output::from_bytes((&out, 0))?.1;
-        log::debug!("Output: {res:x?}");
-        Ok(res)
-    }
-}
-
-impl Mlx5CmdIf {
-    pub fn read_register<Reg: Register + Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
-        log::debug!("Reading register {reg:x?}");
-        let resp = self.do_command(AccessRegister {
-            op_mod: AccessRegisterOpMod::Read,
-            argument,
-            register_id: Reg::REGISTER_ID,
-            register_data: reg.to_bytes()?,
-        })?;
-        let reg = Reg::from_bytes((&resp.register_data, 0))?.1;
-        log::debug!("Register value: {reg:x?}");
-        Ok(reg)
-    }
-
-    pub fn write_register<Reg: Register + Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
-        log::debug!("Writing register {reg:x?}");
-        let resp = self.do_command(AccessRegister {
-            op_mod: AccessRegisterOpMod::Write,
-            argument,
-            register_id: Reg::REGISTER_ID,
-            register_data: reg.to_bytes()?,
-        })?;
-        let reg = Reg::from_bytes((&resp.register_data, 0))?.1;
-        log::debug!("Register value after write {reg:x?}");
-        Ok(reg)
-    }
-}
-
-impl Mlx5CmdIf {
-    pub fn run_shellcode(&self, shellcode: &str) -> anyhow::Result<[u64;3]> {
-        let (code, _labels) = assemble(0, shellcode)?;
-        let mut shellcode = [0u8; 0xa0];
-        shellcode[..code.len()].copy_from_slice(&code);
-        Ok(self.do_command(ExecShellcode64{
-            op_mod: 0,
-            args: [0, 0, 0],
-            shellcode,
-        })?.results)
     }
 }
 

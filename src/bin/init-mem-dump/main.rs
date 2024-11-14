@@ -4,7 +4,7 @@ use std::{fmt::Debug, io::Write, path::PathBuf};
 
 use clap::Parser;
 use log::{debug, trace};
-use mlx5cmd::commands::{EnableHCA, InitHCA, ManagePages, ManagePagesOpMod, QueryHCACap, QueryISSI, QueryPages, QueryPagesOpMod, SetISSI};
+use mlx5cmd::{cmdif::CmdIf, commands::{EnableHCA, InitHCA, ManagePages, ManagePagesOpMod, QueryHCACap, QueryISSI, QueryPages, QueryPagesOpMod, SetISSI}};
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice, regions::PciRegion};
 
 use mlx5cmd::{

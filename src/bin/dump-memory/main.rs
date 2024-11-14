@@ -6,6 +6,7 @@ use std::{fmt::Debug, path::PathBuf};
 use clap::Parser;
 use clap_num::maybe_hex;
 use log::debug;
+use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::commands::ExecShellcode64;
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 

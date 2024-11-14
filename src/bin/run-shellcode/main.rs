@@ -6,6 +6,7 @@ use std::time::SystemTime;
 use std::{fmt::Debug, path::PathBuf};
 
 use clap::Parser;
+use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::commands::ExecShellcode64;
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 
