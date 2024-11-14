@@ -33,9 +33,12 @@ pub struct CreateMKeyOutput {
 pub struct MKeyContext {
     #[deku(pad_bits_before = "1", bits = "1")]
     pub free: bool,
+
     #[deku(pad_bits_before = "14", bits = "1")]
     pub umr_en: bool,
-    #[deku(pad_bits_before = "1", bits = "1")]
+    #[deku(bits = "1")]
+    pub a: bool,
+    #[deku(bits = "1")]
     pub rw: bool,
     #[deku(bits = "1")]
     pub rr: bool,
@@ -59,7 +62,9 @@ pub struct MKeyContext {
     pub start_addr: u64,
     pub len: u64,
 
-    #[deku(pad_bytes_before = "20")]
+    pub bsf_octword_size: u32,
+
+    #[deku(pad_bytes_before = "16")]
     pub translation_octword_size: u32,
 
     #[deku(pad_bits_before = "27", bits = "5", pad_bytes_after = "4")]
@@ -104,6 +109,7 @@ mod tests {
             ctx: MKeyContext {
                 free: true,
                 umr_en: false,
+                a: false,
                 rw: true,
                 rr: true,
                 lw: true,
@@ -115,6 +121,7 @@ mod tests {
                 pd: 17,
                 start_addr: 0x12345678_9abcdef0,
                 len: 0x41424344_45464748,
+                bsf_octword_size: 0,
                 translation_octword_size: 0x98765432,
                 log_entry_size: 1,
             },
