@@ -6,8 +6,6 @@ use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::registers::flash::MFBA;
 use mlx5cmd::registers::flash::MFPA;
 use mlx5cmd::cmdif::vfio::VfioCmdIf;
-use pci_driver::backends::vfio::VfioPciDevice;
-use pci_driver::device::PciDevice;
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -19,11 +17,7 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
     let args = CliArgs::parse();
 
-    let pci_device = VfioPciDevice::open(args.device)?;
-    pci_device.reset()?;
-    let mut cmdif = VfioCmdIf::new(pci_device)?;
-
-    cmdif.initialize()?;
+    let cmdif = VfioCmdIf::open_from_sysfs(&args.device, true, true)?;
 
     let mut flash_data = vec![];
 

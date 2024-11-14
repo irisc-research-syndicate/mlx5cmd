@@ -5,7 +5,7 @@ use std::{fmt::Debug, io::Write, path::PathBuf};
 use clap::Parser;
 use log::{debug, trace};
 use mlx5cmd::{cmdif::CmdIf, commands::{EnableHCA, InitHCA, ManagePages, ManagePagesOpMod, QueryHCACap, QueryISSI, QueryPages, QueryPagesOpMod, SetISSI}};
-use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice, regions::PciRegion};
+use pci_driver::regions::PciRegion;
 
 use mlx5cmd::{
     error::Result, cmdif::vfio::VfioCmdIf
@@ -23,10 +23,8 @@ fn main() -> Result<()> {
     env_logger::init();
     let args = CliArgs::parse();
 
-    let pci_device = VfioPciDevice::open(args.device)?;
-    pci_device.reset()?;
+    let cmdif = VfioCmdIf::open_from_sysfs(&args.device, true, false)?;
 
-    let cmdif = VfioCmdIf::new(pci_device)?;
     cmdif.do_command(EnableHCA(()))?;
     cmdif.do_command(QueryISSI(()))?;
     cmdif.do_command(SetISSI { current_issi: 1 })?;

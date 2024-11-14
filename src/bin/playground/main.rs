@@ -135,9 +135,7 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
     let args = CliArgs::parse();
 
-    let pci_device = VfioPciDevice::open(args.device)?;
-    pci_device.reset()?;
-    let mut cmdif = VfioCmdIf::new(pci_device)?;
+    let mut cmdif = VfioCmdIf::open_from_sysfs(&args.device, true, true)?;
 
     {
         let mtcr = MTCR::open_from_cmdif(&cmdif)?;
@@ -150,8 +148,6 @@ fn main() -> anyhow::Result<()> {
         dbg!(icmd.set_itrace(0xffffffff, 1, 0))?;
         dbg!(icmd.check_badc0ffe_unlocked())?;
     }
-
-    cmdif.initialize()?;
 
     //let interrupts = cmdif.pci_device.interrupts();
     //let intr_evfds = (0..interrupts.msi_x().max()).map(|_| Ok(eventfd::EventFD::new(0, eventfd::EfdFlags::EFD_CLOEXEC)?) ).collect::<Result<Vec<_>>>()?;

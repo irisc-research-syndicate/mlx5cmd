@@ -1,4 +1,4 @@
-use std::{collections::HashMap, thread::sleep, time::Duration};
+use std::{collections::HashMap, path::Path, thread::sleep, time::Duration};
 
 use crate::{
     allocator::{AllocationGuard, Allocator}, cmdif::CmdIf, commands::{
@@ -30,7 +30,23 @@ pub struct VfioCmdIf {
 const DMA_PAGES: usize = 32768;
 
 impl VfioCmdIf {
-    pub fn new(pci_device: VfioPciDevice) -> Result<Self> {
+    pub fn open_from_sysfs(
+        sysfs_path: impl AsRef<Path>,
+        reset: bool,
+        init: bool,
+    ) -> Result<Self> {
+        let pci_device = VfioPciDevice::open(sysfs_path)?;
+        if reset {
+            pci_device.reset()?;
+        }
+        let mut cmdif = Self::open_vfio_device(pci_device)?;
+        if init {
+            cmdif.initialize()?
+        }
+        Ok(cmdif)
+    }
+
+    pub fn open_vfio_device(pci_device: VfioPciDevice) -> Result<Self> {
         pci_device
             .config()
             .command()

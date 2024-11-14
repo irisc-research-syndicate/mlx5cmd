@@ -8,7 +8,6 @@ use clap_num::maybe_hex;
 use log::debug;
 use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::commands::ExecShellcode64;
-use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 
 use mlx5cmd::{
     error::Result, cmdif::vfio::VfioCmdIf
@@ -42,11 +41,7 @@ fn main() -> Result<()> {
     env_logger::init();
     let args = CliArgs::parse();
 
-    let pci_device = VfioPciDevice::open(args.device)?;
-    pci_device.reset()?;
-
-    let mut cmdif = VfioCmdIf::new(pci_device)?;
-    cmdif.initialize()?;
+    let cmdif = VfioCmdIf::open_from_sysfs(&args.device, true, true)?;
 
     let (code, labels) = assemble(0x00000000u32, READMEM_SHELLCODE).unwrap();
 
