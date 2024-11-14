@@ -5,7 +5,7 @@ use clap::Parser;
 use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::registers::flash::MFBA;
 use mlx5cmd::registers::flash::MFPA;
-use mlx5cmd::mlx::Mlx5CmdIf;
+use mlx5cmd::cmdif::vfio::Mlx5CmdIf;
 use pci_driver::backends::vfio::VfioPciDevice;
 use pci_driver::device::PciDevice;
 

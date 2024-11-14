@@ -8,7 +8,7 @@ use mlx5cmd::{cmdif::CmdIf, commands::{EnableHCA, InitHCA, ManagePages, ManagePa
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice, regions::PciRegion};
 
 use mlx5cmd::{
-    error::Result, mlx::Mlx5CmdIf
+    error::Result, cmdif::vfio::Mlx5CmdIf
 };
 
 #[derive(Parser, Debug)]

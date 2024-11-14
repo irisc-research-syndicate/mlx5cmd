@@ -1,5 +1,5 @@
 use pci_driver::{config::{caps::Capability, PciConfig}, device::PciDevice, regions::{AsPciSubregion, PciRegion, PciSubregion}};
-use crate::{error::{Error, Result}, mlx::Mlx5CmdIf};
+use crate::{error::{Error, Result}, cmdif::vfio::Mlx5CmdIf};
 use log::{trace, debug};
 
 pub const AS_ICMD_EXT: u16 = 0x1;

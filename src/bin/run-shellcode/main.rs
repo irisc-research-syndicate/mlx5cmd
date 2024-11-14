@@ -11,7 +11,7 @@ use mlx5cmd::commands::ExecShellcode64;
 use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice};
 
 use mlx5cmd::{
-    error::Result, mlx::Mlx5CmdIf
+    error::Result, cmdif::vfio::Mlx5CmdIf
 };
 
 use irisc_asm::assemble_template;

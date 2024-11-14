@@ -1,6 +1,8 @@
 use deku::DekuContainerRead;
 use irisc_asm::assemble;
 
+pub mod vfio;
+
 use crate::{commands::{access_register::{AccessRegister, AccessRegisterOpMod}, BaseOutputStatus, Command, CommandErrorStatus, ExecShellcode64}, error::{Error, Result}, registers::Register};
 
 pub trait CmdIf {

@@ -19,7 +19,7 @@ use pci_driver::{backends::vfio::VfioPciDevice, device::PciDevice, regions::PciR
 use dbg_hex::dbg_hex;
 
 use mlx5cmd::{
-    error::Result, mlx::Mlx5CmdIf
+    error::Result, cmdif::vfio::Mlx5CmdIf
 };
 
 #[derive(Parser, Debug)]
