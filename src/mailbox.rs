@@ -7,6 +7,10 @@ use pci_driver::{
 
 use crate::error::Result;
 
+const MAILBOX_BLOCK_SIZE: usize = 0x200;
+const MAILBOX_STRIDE: u64 = 0x400;
+const CTRL_SIGNATURE_START: usize = 0x1c0;
+
 pci_struct! {
     pub struct Mailbox<'a> : 0x240 {
         next_pointer_hi     @ 0x230 : PciRegisterRw<'a, u32>,
@@ -39,7 +43,7 @@ impl<'a> Mailbox<'a> {
         let mut mb_data = vec![0u8; self.len() as usize];
         self.read_bytes(0, &mut mb_data)?;
         let mut ctrl_signature = 0xff_u8;
-        for x in mb_data[0x1c0..0x200].iter() {
+        for x in mb_data[CTRL_SIGNATURE_START..MAILBOX_BLOCK_SIZE].iter() {
             ctrl_signature ^= x;
         }
         self.ctrl_signature().write(ctrl_signature)?;
@@ -68,12 +72,12 @@ impl<'a> MailboxAllocator<'a> {
 
     pub fn allocate_mailbox(&mut self) -> Result<(u64, Mailbox<'a>)> {
         let mailbox_offset = self.allocation_offset;
-        self.allocation_offset += 0x400;
+        self.allocation_offset += MAILBOX_STRIDE;
         Ok((
             mailbox_offset,
             Mailbox::backed_by(
                 self.region
-                    .subregion(mailbox_offset..mailbox_offset + 0x400),
+                    .subregion(mailbox_offset..mailbox_offset + MAILBOX_STRIDE),
             ),
         ))
     }
@@ -81,7 +85,7 @@ impl<'a> MailboxAllocator<'a> {
     pub fn build_mailbox(&mut self, token: u8, data: &[u8]) -> Result<Vec<Mailbox<'a>>> {
         let mut mb_vec: Vec<Mailbox<'_>> = vec![];
 
-        for (block_number, chunk) in data.chunks(0x200).enumerate() {
+        for (block_number, chunk) in data.chunks(MAILBOX_BLOCK_SIZE).enumerate() {
             let mb = self.allocate_mailbox()?.1;
             if let Some(prev_mb) = mb_vec.last() {
                 prev_mb.set_next(mb.as_ptr().unwrap() as u64)?;

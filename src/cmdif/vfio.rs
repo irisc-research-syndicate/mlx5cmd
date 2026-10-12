@@ -29,6 +29,11 @@ pub struct VfioCmdIf {
 
 const DMA_PAGES: usize = 32768;
 
+const CMD_TYPE_PCIE: u8 = 0x07;
+const CQE_INLINE_INPUT: u64 = 0x10;
+const CQE_INLINE_OUTPUT: u64 = 0x20;
+const CQE_INLINE_LEN: usize = 0x10;
+
 impl VfioCmdIf {
     pub fn open_from_sysfs(
         sysfs_path: impl AsRef<Path>,
@@ -154,24 +159,24 @@ impl CmdIf for VfioCmdIf {
         let mailbox_region = self.dma_allocator.alloc(256).unwrap();
         let mut mailbox_allocator = MailboxAllocator::new((&*mailbox_region).subregion(..));
 
-        cmd.cmd_type().write(0x07)?;
+        cmd.cmd_type().write(CMD_TYPE_PCIE)?;
 
         cmd.set_input_mb(0)?;
         cmd.set_output_mb(0)?;
 
         cmd.input_length().write((input.len() as u32).to_be())?;
-        for (i, b) in input[..0x10].iter().enumerate() {
-            cmd.write_u8(0x10 + i as u64, *b)?;
+        for (i, b) in input[..CQE_INLINE_LEN].iter().enumerate() {
+            cmd.write_u8(CQE_INLINE_INPUT + i as u64, *b)?;
         }
 
-        let in_mb_vec = mailbox_allocator.build_mailbox(0x00, &input[0x10..])?;
+        let in_mb_vec = mailbox_allocator.build_mailbox(0x00, &input[CQE_INLINE_LEN..])?;
         if let Some(in_mb) = in_mb_vec.first() {
             cmd.set_input_mb(in_mb.as_ptr().unwrap() as u64)?;
         }
 
         cmd.output_length().write(outlen.to_be())?;
-        for (i, b) in [0u8; 0x10].iter().enumerate() {
-            cmd.write_u8(0x20 + i as u64, *b)?;
+        for (i, b) in [0u8; CQE_INLINE_LEN].iter().enumerate() {
+            cmd.write_u8(CQE_INLINE_OUTPUT + i as u64, *b)?;
         }
 
         let out_mb_vec = mailbox_allocator.build_mailbox(0x00, &vec![0u8; outlen as usize])?;
@@ -197,8 +202,8 @@ impl CmdIf for VfioCmdIf {
         log::trace!("Command: {cmd:?}");
 
         let mut output = vec![];
-        for i in 0x00..0x10 {
-            output.push(cmd.read_u8(0x20 + i)?)
+        for i in 0..CQE_INLINE_LEN {
+            output.push(cmd.read_u8(CQE_INLINE_OUTPUT + i as u64)?)
         }
         for out_mb in out_mb_vec.iter() {
             let mut chunk = vec![0u8; 0x200];
