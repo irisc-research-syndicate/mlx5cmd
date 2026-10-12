@@ -1,24 +1,26 @@
 use std::{collections::HashMap, path::Path, thread::sleep, time::Duration};
 
 use crate::{
-    allocator::{AllocationGuard, Allocator}, cmdif::CmdIf, commands::{
-        ManagePages, ManagePagesOpMod, QueryPages, QueryPagesOpMod
-    }, cqe::CQE, error::{Error, Result}, init::InitSegment, mailbox::MailboxAllocator
+    allocator::{AllocationGuard, Allocator},
+    cmdif::CmdIf,
+    commands::{ManagePages, ManagePagesOpMod, QueryPages, QueryPagesOpMod},
+    cqe::CQE,
+    error::{Error, Result},
+    init::InitSegment,
+    mailbox::MailboxAllocator,
 };
 use log::{debug, trace};
 use pci_driver::{
     backends::vfio::VfioPciDevice,
     device::PciDevice,
     regions::{
-        AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, PciRegion, Permissions
+        AsPciSubregion, BackedByPciSubregion, MappedOwningPciRegion, PciMemoryRegion, PciRegion,
+        Permissions,
     },
 };
 
-use crate::commands::{
-    SetISSI, EnableHCA, QueryISSI, QueryHCACap, InitHCA
-};
+use crate::commands::{EnableHCA, InitHCA, QueryHCACap, QueryISSI, SetISSI};
 
-#[allow(dead_code)]
 pub struct VfioCmdIf {
     pub pci_device: VfioPciDevice,
     pub bar0_region: MappedOwningPciRegion,
@@ -35,11 +37,7 @@ const CQE_INLINE_OUTPUT: u64 = 0x20;
 const CQE_INLINE_LEN: usize = 0x10;
 
 impl VfioCmdIf {
-    pub fn open_from_sysfs(
-        sysfs_path: impl AsRef<Path>,
-        reset: bool,
-        init: bool,
-    ) -> Result<Self> {
+    pub fn open_from_sysfs(sysfs_path: impl AsRef<Path>, reset: bool, init: bool) -> Result<Self> {
         let pci_device = VfioPciDevice::open(sysfs_path)?;
         if reset {
             pci_device.reset()?;
@@ -77,9 +75,7 @@ impl VfioCmdIf {
     }
 
     pub fn handle_page_request(&mut self, page_type: QueryPagesOpMod) -> Result<()> {
-        let query_pages = self.do_command(QueryPages {
-            op_mod: page_type,
-        })?;
+        let query_pages = self.do_command(QueryPages { op_mod: page_type })?;
 
         if query_pages.num_pages > 0 {
             let mut pages = vec![];
@@ -113,7 +109,6 @@ impl VfioCmdIf {
         }
 
         Ok(())
-
     }
 
     pub fn initialize(&mut self) -> Result<()> {
@@ -128,7 +123,7 @@ impl VfioCmdIf {
         self.handle_page_request(QueryPagesOpMod::InitPages)?;
 
         self.do_command(InitHCA(()))?;
-        
+
         Ok(())
     }
 

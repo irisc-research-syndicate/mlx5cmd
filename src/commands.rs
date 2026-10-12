@@ -1,28 +1,28 @@
 pub mod access_register;
 pub mod create_mkey;
+pub mod eq;
 pub mod exec_shellcode;
 pub mod hca;
 pub mod issi;
 pub mod manage_pages;
+pub mod pd;
 pub mod query_adapter;
 pub mod query_hca_cap;
 pub mod query_pages;
 pub mod set_driver_version;
 pub mod uar;
-pub mod pd;
-pub mod eq;
 
+pub use eq::*;
 pub use exec_shellcode::*;
 pub use hca::*;
 pub use issi::*;
 pub use manage_pages::*;
+pub use pd::*;
 pub use query_adapter::*;
 pub use query_hca_cap::*;
 pub use query_pages::*;
 pub use set_driver_version::*;
-pub use pd::*;
 pub use uar::*;
-pub use eq::*;
 
 use thiserror::Error;
 
@@ -54,60 +54,60 @@ pub struct BaseOutputStatus(pub BaseOutput);
 #[derive(Error, Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(type = "u8", endian = "ctx_endian", ctx = "ctx_endian: Endian")]
 pub enum CommandErrorStatus {
-    #[error["Ok"]]
+    #[error("Ok")]
     #[deku(id = "0x00")]
     Ok,
 
-    #[error["Internal error"]]
+    #[error("Internal error")]
     #[deku(id = "0x01")]
     InternalError,
 
-    #[error["Bad operation"]]
+    #[error("Bad operation")]
     #[deku(id = "0x02")]
     BadOperation,
 
-    #[error["Bad parameter"]]
+    #[error("Bad parameter")]
     #[deku(id = "0x03")]
     BadParameter,
 
-    #[error["Bad system State"]]
+    #[error("Bad system State")]
     #[deku(id = "0x04")]
     BadSystemState,
 
-    #[error["Bad resource"]]
+    #[error("Bad resource")]
     #[deku(id = "0x05")]
     BadResource,
 
-    #[error["Resource busy"]]
+    #[error("Resource busy")]
     #[deku(id = "0x06")]
     ResourceBusy,
 
     // 0x07 ???
-    #[error["Exceeded limit"]]
+    #[error("Exceeded limit")]
     #[deku(id = "0x08")]
     ExceededLimit,
 
-    #[error["Bad resource state"]]
+    #[error("Bad resource state")]
     #[deku(id = "0x09")]
     BadResourceState,
 
-    #[error["Bad index"]]
+    #[error("Bad index")]
     #[deku(id = "0x0a")]
     BadIndex,
 
-    #[error["No resources"]]
+    #[error("No resources")]
     #[deku(id = "0x0f")]
     NoResources,
 
-    #[error["Bad input length"]]
+    #[error("Bad input length")]
     #[deku(id = "0x50")]
     BadInputLen,
 
-    #[error["Bad output length"]]
+    #[error("Bad output length")]
     #[deku(id = "0x51")]
     BadOutputLen,
 
-    #[error["Unkonwn error status code: {0}"]]
+    #[error("Unknown error status code: {0}")]
     #[deku(id_pat = "_")]
     UnknownError(u8),
 }
