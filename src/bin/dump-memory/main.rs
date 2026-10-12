@@ -46,6 +46,7 @@ fn main() -> Result<()> {
     let mut output = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(args.output)?;
 
     for address in (args.base..args.base + args.length).step_by(8) {

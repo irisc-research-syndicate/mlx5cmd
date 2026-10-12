@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
             .read_register(
                 MFBA {
                     size: 0x40,
-                    address: address,
+                    address,
                     ..MFBA::default()
                 },
                 0,

@@ -91,7 +91,7 @@ fn main() -> Result<()> {
             parameters: BTreeMap::from_iter(args.param.clone()),
             arguments: Default::default(),
             template: template.clone(),
-            timestamp: timestamp,
+            timestamp,
         },
     )?;
 
@@ -132,7 +132,7 @@ fn main() -> Result<()> {
         output_json(
             &mut output,
             &ExperimentData {
-                parameters: parameters,
+                parameters,
                 shellcode: code,
                 arguments: [0; 3],
                 results: exec_output.results,

@@ -79,6 +79,7 @@ fn main() -> Result<()> {
     let mut output = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(args.output)?;
     for page in managed_pages {
         let mut content = [0u8; 4096];

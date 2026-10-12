@@ -52,7 +52,7 @@ impl Allocator {
             Some(AllocationGuard {
                 allocator: self.clone(),
                 region: Some(region),
-                memory: memory,
+                memory,
             })
         } else {
             None

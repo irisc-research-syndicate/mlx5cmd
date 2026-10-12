@@ -104,7 +104,7 @@ impl<'a> ICmd<'a> {
         mtcr.change_address_space(AS_ICMD)?;
         Ok(Self {
             max_cmd_size: mtcr.read_dword(VCR_CMD_SIZE_ADDR)?,
-            mtcr: mtcr,
+            mtcr,
         })
     }
 

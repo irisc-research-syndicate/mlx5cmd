@@ -127,7 +127,7 @@ impl VfioCmdIf {
         Ok(())
     }
 
-    pub fn init_segment(&self) -> InitSegment {
+    pub fn init_segment(&self) -> InitSegment<'_> {
         InitSegment::backed_by(&self.bar0_region)
     }
 

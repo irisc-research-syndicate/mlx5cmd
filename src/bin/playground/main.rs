@@ -66,7 +66,7 @@ pub fn create_mtt_mkey(
                 qpn: 0xffffff,
                 mkey: key,
                 length64: false,
-                pd: pd,
+                pd,
                 // start_addr: memory.as_ptr().unwrap() as u64,
                 // len: memory.len(),
                 start_addr: 0x0000,
@@ -108,7 +108,7 @@ pub fn create_pa_mkey(
             qpn: 0xffffff,
             mkey: key,
             length64: false,
-            pd: pd,
+            pd,
             start_addr: memory.as_ptr().unwrap() as u64,
             len: memory.len(),
             bsf_octword_size: 0,
@@ -146,14 +146,14 @@ pub fn create_eq(
                 ec: false,
                 oi: false,
                 st: 0,
-                log_eq_size: log_eq_size,
+                log_eq_size,
                 uar_page: eq_uar,
                 intr: 0,
                 log_page_size: log_eq_size - 6,
                 consumer_counter: 0,
                 producer_counter: 0,
             },
-            event_bitmask: event_bitmask,
+            event_bitmask,
             pas: (0..pages)
                 .map(|page| eq_memory.as_ptr().unwrap() as u64 + (page as u64) * 0x1000)
                 .collect(),
@@ -203,7 +203,7 @@ fn main() -> anyhow::Result<()> {
     cmdif.write_register(
         MtrcConfReg {
             trace_mode: 1,
-            trace_mkey: trace_mkey,
+            trace_mkey,
             log_trace_buffer_size: 2,
         },
         0,
