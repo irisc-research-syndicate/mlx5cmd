@@ -61,7 +61,7 @@ impl VfioCmdIf {
         let bar0_region = bar0.map(..bar0.len(), Permissions::ReadWrite)?;
         let dma_region = iommu_map(&pci_device.iommu(), 0x10000000_u64, DMA_PAGES << 12)?;
         let dma_allocator: Allocator = Allocator::new(dma_region, 0x1000);
-        let cqe_region: AllocationGuard = dma_allocator.alloc(1).unwrap();
+        let cqe_region: AllocationGuard = dma_allocator.alloc(1).ok_or(Error::OutOfMemory)?;
         let cqe_ptr = cqe_region.as_ptr().unwrap() as u64;
 
         let this = Self {
@@ -85,7 +85,7 @@ impl VfioCmdIf {
             let mut pages = vec![];
             debug!("Allocating {} pages for HCA", query_pages.num_pages);
             for _ in 0..query_pages.num_pages {
-                let page = self.dma_allocator.alloc(1).unwrap();
+                let page = self.dma_allocator.alloc(1).ok_or(Error::OutOfMemory)?;
                 let page_ptr = page.as_ptr().unwrap() as u64;
                 trace!("Allocated {:#x} to HCA", page_ptr);
                 pages.push(page_ptr);
@@ -156,7 +156,7 @@ impl CmdIf for VfioCmdIf {
     fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>> {
         log::trace!("Executing command input={input:02x?} outlen={outlen}");
         let cmd = CQE::backed_by(&*self.cqe_region);
-        let mailbox_region = self.dma_allocator.alloc(256).unwrap();
+        let mailbox_region = self.dma_allocator.alloc(256).ok_or(Error::OutOfMemory)?;
         let mut mailbox_allocator = MailboxAllocator::new((&*mailbox_region).subregion(..));
 
         cmd.cmd_type().write(CMD_TYPE_PCIE)?;
