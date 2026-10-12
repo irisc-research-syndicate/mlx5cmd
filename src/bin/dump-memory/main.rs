@@ -59,7 +59,7 @@ fn main() -> Result<()> {
         })?;
 
         debug!("{:#018x}: {:#018x}", address, exec_output.results[1]);
-        output.write(&exec_output.results[1].to_be_bytes())?;
+        output.write_all(&exec_output.results[1].to_be_bytes())?;
     }
 
     Ok(())

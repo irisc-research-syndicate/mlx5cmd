@@ -84,8 +84,8 @@ fn main() -> Result<()> {
         let mut content = [0u8; 4096];
         let address = page.as_ptr().unwrap() as u64;
         page.read_bytes(0, &mut content)?;
-        output.write(&address.to_be_bytes())?;
-        output.write(&content)?;
+        output.write_all(&address.to_be_bytes())?;
+        output.write_all(&content)?;
     }
 
     Ok(())

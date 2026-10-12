@@ -41,7 +41,7 @@ mod tests {
 
         cmd.driver_version
             .as_mut_slice()
-            .write(b"test-version\0")
+            .write_all(b"test-version\0")
             .unwrap();
 
         let res = cmd.to_bytes().unwrap();
