@@ -37,7 +37,7 @@ pub struct ExecShellcode64 {
     #[deku(pad_bytes_before = "4")]
     pub op_mod: u16,
     pub args: [u64; 3],
-    pub shellcode: [u8; 0xa0]
+    pub shellcode: [u8; 0xa0],
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
@@ -59,8 +59,6 @@ impl Command for ExecShellcode64 {
         0xc0
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

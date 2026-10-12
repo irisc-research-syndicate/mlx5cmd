@@ -1,5 +1,5 @@
-pub mod mtrc;
 pub mod flash;
+pub mod mtrc;
 
 use deku::{DekuContainerRead, DekuContainerWrite};
 

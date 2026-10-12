@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use mlx5cmd::cmdif::vfio::VfioCmdIf;
 use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::registers::flash::MFBA;
 use mlx5cmd::registers::flash::MFPA;
-use mlx5cmd::cmdif::vfio::VfioCmdIf;
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -22,15 +22,20 @@ fn main() -> anyhow::Result<()> {
     let mut flash_data = vec![];
 
     log::info!("{:x?}", cmdif.read_register(MFPA::default(), 0)?);
-    for address in (0..16*1024*1024).step_by(0x40) {
+    for address in (0..16 * 1024 * 1024).step_by(0x40) {
         if address & 0xffff == 0 {
             log::info!("{:x}", address);
         }
-        let chunk = cmdif.read_register(MFBA {
-            size: 0x40,
-            address: address,
-            ..MFBA::default()
-        }, 0)?.data;
+        let chunk = cmdif
+            .read_register(
+                MFBA {
+                    size: 0x40,
+                    address: address,
+                    ..MFBA::default()
+                },
+                0,
+            )?
+            .data;
         flash_data.extend_from_slice(&chunk);
     }
 

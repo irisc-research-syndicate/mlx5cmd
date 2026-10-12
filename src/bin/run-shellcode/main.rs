@@ -9,15 +9,12 @@ use clap::Parser;
 use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::commands::ExecShellcode64;
 
-use mlx5cmd::{
-    error::Result, cmdif::vfio::VfioCmdIf
-};
+use mlx5cmd::{cmdif::vfio::VfioCmdIf, error::Result};
 
 use irisc_asm::assemble_template;
 use irisc_asm::utils::{cartesian_product, parse_parameter};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -33,11 +30,9 @@ struct CliArgs {
     #[arg(short, long, value_parser = parse_parameter)]
     param: Vec<(String, Vec<u64>)>,
 
-
     template: PathBuf,
     output: Option<PathBuf>,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 struct Experiment {
@@ -46,7 +41,6 @@ struct Experiment {
     template: String,
     timestamp: u64,
 }
-
 
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -61,7 +55,6 @@ struct ExperimentData {
     total_time: u128,
 }
 
-
 fn main() -> Result<()> {
     env_logger::init();
     let args = CliArgs::parse();
@@ -69,11 +62,15 @@ fn main() -> Result<()> {
     let cmdif = VfioCmdIf::open_from_sysfs(&args.device, true, true)?;
 
     let template = std::fs::read_to_string(&args.template)?;
-    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
 
     let output_path = args.output.unwrap_or_else(|| {
         std::fs::create_dir_all(&args.outdir).unwrap();
-        args.outdir.join(args.template.with_extension(format!("{}.json", timestamp)))
+        args.outdir
+            .join(args.template.with_extension(format!("{}.json", timestamp)))
     });
     let mut output = std::io::BufWriter::with_capacity(
         args.output_buffer,
@@ -81,23 +78,30 @@ fn main() -> Result<()> {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(output_path)?
+            .open(output_path)?,
     );
 
     fn output_json(output: &mut impl Write, value: &impl Serialize) -> Result<usize> {
         Ok(output.write(format!("{}\n", serde_json::to_string(value).unwrap()).as_bytes())?)
     }
 
-    output_json(&mut output,&Experiment {
-        parameters: BTreeMap::from_iter(args.param.clone()),
-        arguments: Default::default(),
-        template: template.clone(),
-        timestamp: timestamp,
-    })?;
+    output_json(
+        &mut output,
+        &Experiment {
+            parameters: BTreeMap::from_iter(args.param.clone()),
+            arguments: Default::default(),
+            template: template.clone(),
+            timestamp: timestamp,
+        },
+    )?;
 
     let mut iteration_start_time = SystemTime::now();
 
-    for (i, parameters) in cartesian_product(args.param).into_iter().map(BTreeMap::from_iter).enumerate() {
+    for (i, parameters) in cartesian_product(args.param)
+        .into_iter()
+        .map(BTreeMap::from_iter)
+        .enumerate()
+    {
         if i & 0x3ff == 0 {
             dbg!(i);
             dbg!(&parameters);
@@ -125,15 +129,18 @@ fn main() -> Result<()> {
 
         iteration_start_time = SystemTime::now();
 
-        output_json(&mut output, &ExperimentData {
-            parameters: parameters,
-            shellcode: code,
-            arguments: [0; 3],
-            results: exec_output.results,
-            execution_time,
-            assembly_time,
-            total_time,
-        })?;
+        output_json(
+            &mut output,
+            &ExperimentData {
+                parameters: parameters,
+                shellcode: code,
+                arguments: [0; 3],
+                results: exec_output.results,
+                execution_time,
+                assembly_time,
+                total_time,
+            },
+        )?;
     }
 
     output.flush()?;

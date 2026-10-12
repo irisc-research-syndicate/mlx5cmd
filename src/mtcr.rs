@@ -1,6 +1,13 @@
-use pci_driver::{config::{caps::Capability, PciConfig}, device::PciDevice, regions::{AsPciSubregion, PciRegion, PciSubregion}};
-use crate::{error::{Error, Result}, cmdif::vfio::VfioCmdIf};
-use log::{trace, debug};
+use crate::{
+    cmdif::vfio::VfioCmdIf,
+    error::{Error, Result},
+};
+use log::{debug, trace};
+use pci_driver::{
+    config::{caps::Capability, PciConfig},
+    device::PciDevice,
+    regions::{AsPciSubregion, PciRegion, PciSubregion},
+};
 
 pub const AS_ICMD_EXT: u16 = 0x1;
 pub const AS_CR_SPACE: u16 = 0x2;
@@ -23,7 +30,7 @@ fn find_capability<'a>(config: &PciConfig<'a>, cap_id: u8) -> Result<PciSubregio
 }
 
 pub struct MTCR<'a> {
-    pub cap_region: PciSubregion<'a>
+    pub cap_region: PciSubregion<'a>,
 }
 
 pub const PCI_CONTROL: u64 = 0x04;
@@ -33,17 +40,15 @@ pub const PCI_ADDRESS: u64 = 0x10;
 pub const PCI_DATA: u64 = 0x14;
 
 impl<'a> MTCR<'a> {
-
     pub fn from_subregion(cap_region: PciSubregion<'a>) -> Self {
-        Self {
-            cap_region
-        }
+        Self { cap_region }
     }
-    
+
     pub fn change_address_space(&self, address_space: u16) -> Result<()> {
         trace!("MTCR: changing address to {}", address_space);
         let ctrl = self.cap_region.read_le_u32(PCI_CONTROL)?;
-        self.cap_region.write_le_u32(PCI_CONTROL, (ctrl & 0xffff0000) | (address_space as u32))?;
+        self.cap_region
+            .write_le_u32(PCI_CONTROL, (ctrl & 0xffff0000) | (address_space as u32))?;
         let ctrl = self.cap_region.read_le_u32(PCI_CONTROL)?;
         if (ctrl >> 29) & 0x7 == 0 {
             return Err(Error::InvalidAddressSpace);
@@ -55,7 +60,7 @@ impl<'a> MTCR<'a> {
         match self.change_address_space(address_space) {
             Ok(_) => Ok(true),
             Err(Error::InvalidAddressSpace) => Ok(false),
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
@@ -66,7 +71,6 @@ impl<'a> MTCR<'a> {
         self.cap_region.write_le_u32(PCI_ADDRESS, address)?;
         while (self.cap_region.read_le_u32(PCI_ADDRESS)? >> 31) & 1 != 0 {
             trace!("Waiting for dword write");
-            
         }
         Ok(())
     }
@@ -77,7 +81,6 @@ impl<'a> MTCR<'a> {
         self.cap_region.write_le_u32(PCI_ADDRESS, address)?;
         while (self.cap_region.read_le_u32(PCI_ADDRESS)? >> 31) & 1 != 1 {
             trace!("Waiting for dword read");
-            
         }
         let data = self.cap_region.read_le_u32(PCI_DATA)?;
         debug!("Read dword {:x}", data);
@@ -85,13 +88,15 @@ impl<'a> MTCR<'a> {
     }
 
     pub fn open_from_cmdif(cmdif: &'a VfioCmdIf) -> Result<Self> {
-        Ok(MTCR { cap_region: find_capability(&cmdif.pci_device.config(), 0x09)? })
+        Ok(MTCR {
+            cap_region: find_capability(&cmdif.pci_device.config(), 0x09)?,
+        })
     }
 }
 
 pub struct ICmd<'a> {
     pub mtcr: MTCR<'a>,
-    pub max_cmd_size: u32
+    pub max_cmd_size: u32,
 }
 
 impl<'a> ICmd<'a> {
@@ -103,7 +108,12 @@ impl<'a> ICmd<'a> {
         })
     }
 
-    pub fn send_icmd_command(&self, opcode: u16, command: Vec<u32>, outlen: usize) -> Result<(u8, Vec<u32>)> {
+    pub fn send_icmd_command(
+        &self,
+        opcode: u16,
+        command: Vec<u32>,
+        outlen: usize,
+    ) -> Result<(u8, Vec<u32>)> {
         self.icmd_set_opcode(opcode)?;
         self.write_command(command)?;
         self.ctrl_modify(|ctrl| ctrl | 0x00000001)?;
@@ -116,21 +126,22 @@ impl<'a> ICmd<'a> {
 
     pub fn write_command(&self, command: Vec<u32>) -> Result<()> {
         for (offset, dword) in command.into_iter().enumerate() {
-            self.mtcr.write_dword(VCR_CMD_ADDR + 4*(offset as u32), dword)?
+            self.mtcr
+                .write_dword(VCR_CMD_ADDR + 4 * (offset as u32), dword)?
         }
         Ok(())
     }
 
     pub fn read_command(&self, length: usize) -> Result<Vec<u32>> {
-        (0..length).map(|offset|
-            self.mtcr.read_dword(VCR_CMD_ADDR + 4*(offset as u32))
-        ).collect::<Result<Vec<u32>>>()
+        (0..length)
+            .map(|offset| self.mtcr.read_dword(VCR_CMD_ADDR + 4 * (offset as u32)))
+            .collect::<Result<Vec<u32>>>()
     }
 
     pub fn ctrl_read(&self) -> Result<u32> {
         self.mtcr.read_dword(VCR_CTRL_ADDR)
     }
-    
+
     pub fn ctrl_write(&self, ctrl: u32) -> Result<u32> {
         self.mtcr.write_dword(VCR_CTRL_ADDR, ctrl)?;
         Ok(ctrl)
@@ -147,7 +158,11 @@ impl<'a> ICmd<'a> {
 
 impl<'a> ICmd<'a> {
     pub fn set_itrace(&self, mask: u32, level: u8, delay: u16) -> Result<()> {
-        self.send_icmd_command(0xf003, vec![mask, ((delay as u32) << 16) | (level as u32)], 8)?;
+        self.send_icmd_command(
+            0xf003,
+            vec![mask, ((delay as u32) << 16) | (level as u32)],
+            8,
+        )?;
         Ok(())
     }
 

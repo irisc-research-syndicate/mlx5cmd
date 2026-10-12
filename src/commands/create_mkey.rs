@@ -8,28 +8,30 @@ use super::{BaseOutput, Command};
 pub struct CreateMKey {
     #[deku(pad_bytes_before = "10", bits = "1")]
     pub pg_access: bool,
-    #[deku(bits="1")]
+    #[deku(bits = "1")]
     pub umem_valid: bool,
     #[deku(pad_bits_before = "30", bytes = "64")]
     pub context: MKeyContext,
     #[deku(pad_bytes_before = "16")]
     pub translation_octwords_actual_size: u32,
-    #[deku(pad_bytes_before = "172", count="translation_octwords_actual_size")]
-    pub translation_entries: Vec<u64>
+    #[deku(pad_bytes_before = "172", count = "translation_octwords_actual_size")]
+    pub translation_entries: Vec<u64>,
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
-#[deku(endian="big")]
+#[deku(endian = "big")]
 pub struct CreateMKeyOutput {
     pub base: BaseOutput,
 
-    #[deku(pad_bits_before="8", bits="24")]
-    pub mkey_index: u32
-
+    #[deku(pad_bits_before = "8", bits = "24")]
+    pub mkey_index: u32,
 }
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
-#[deku(endian = "ctx_endian", ctx = "ctx_endian: Endian, _ctx_bytes: ByteSize")]
+#[deku(
+    endian = "ctx_endian",
+    ctx = "ctx_endian: Endian, _ctx_bytes: ByteSize"
+)]
 pub struct MKeyContext {
     #[deku(pad_bits_before = "1", bits = "1")]
     pub free: bool,
@@ -84,7 +86,12 @@ impl Command for CreateMKey {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone, DekuRead, DekuWrite)]
-#[deku(type = "u8", bits = "2", endian = "ctx_endian", ctx = "ctx_endian: Endian, _ctx_bits: BitSize")]
+#[deku(
+    type = "u8",
+    bits = "2",
+    endian = "ctx_endian",
+    ctx = "ctx_endian: Endian, _ctx_bits: BitSize"
+)]
 pub enum AccessMode {
     PA = 0,
     MTT = 1,
@@ -97,15 +104,14 @@ mod tests {
 
     #[test]
     fn test_create_mkeycontext() {
-
         #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
-        #[deku(endian="big")]
+        #[deku(endian = "big")]
         struct MCtxContainer {
             #[deku(bytes = "64")]
             ctx: MKeyContext,
         }
 
-        let mctx = MCtxContainer{
+        let mctx = MCtxContainer {
             ctx: MKeyContext {
                 free: true,
                 umr_en: false,
@@ -127,23 +133,74 @@ mod tests {
             },
         };
         assert_eq!(mctx.to_bytes().unwrap().len(), 64);
-        assert_eq!(&mctx.to_bytes().unwrap(), &[
-            1 << 6, 0x00, (15 << 2) | (1 << 0), 0x00,
-            0xff, 0xff, 0xff, 0x41,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 17,
-            0x12, 0x34, 0x56, 0x78,
-            0x9a, 0xbc, 0xde, 0xf0,
-            0x41, 0x42, 0x43, 0x44,
-            0x45, 0x46, 0x47, 0x48,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x98, 0x76, 0x54, 0x32,
-            0x00, 0x00, 0x00, 0x01,
-            0x00, 0x00, 0x00, 0x00,
-        ]);
+        assert_eq!(
+            &mctx.to_bytes().unwrap(),
+            &[
+                1 << 6,
+                0x00,
+                (15 << 2) | (1 << 0),
+                0x00,
+                0xff,
+                0xff,
+                0xff,
+                0x41,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                17,
+                0x12,
+                0x34,
+                0x56,
+                0x78,
+                0x9a,
+                0xbc,
+                0xde,
+                0xf0,
+                0x41,
+                0x42,
+                0x43,
+                0x44,
+                0x45,
+                0x46,
+                0x47,
+                0x48,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x98,
+                0x76,
+                0x54,
+                0x32,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+            ]
+        );
     }
 }

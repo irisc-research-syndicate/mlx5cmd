@@ -1,5 +1,5 @@
-use deku::{DekuRead, DekuWrite};
 use deku::prelude::*;
+use deku::{DekuRead, DekuWrite};
 
 use super::Register;
 
@@ -28,7 +28,7 @@ pub struct MFPA {
     #[deku(pad_bits_before = "12", bits = "4")]
     pub flash_num: usize,
 
-    #[deku(pad_bytes_before="1", bits=24)]
+    #[deku(pad_bytes_before = "1", bits = 24)]
     pub jedec_id: u32,
     #[deku(bits = "8")]
     pub block_size: usize,
@@ -37,7 +37,7 @@ pub struct MFPA {
     #[deku(pad_bits_before = "6", bits = "10")]
     pub sector_size: usize,
 
-    pub capability_mask: u32
+    pub capability_mask: u32,
 }
 
 impl Register for MFPA {
@@ -47,7 +47,6 @@ impl Register for MFPA {
         0x20
     }
 }
-
 
 #[derive(Debug, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
@@ -62,15 +61,22 @@ pub struct MFBA {
     #[deku(pad_bits_before = "23", bits = "9")]
     pub size: usize,
 
-    #[deku(bits="32")]
+    #[deku(bits = "32")]
     pub address: usize,
 
-    pub data: [u8; 0x40]
+    pub data: [u8; 0x40],
 }
 
 impl Default for MFBA {
     fn default() -> Self {
-        Self { add_cap_32b: false, p: false, fs: 0, size: 0, address: 0, data: [0u8; 0x40] }
+        Self {
+            add_cap_32b: false,
+            p: false,
+            fs: 0,
+            size: 0,
+            address: 0,
+            data: [0u8; 0x40],
+        }
     }
 }
 

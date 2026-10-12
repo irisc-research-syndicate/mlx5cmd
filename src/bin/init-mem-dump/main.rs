@@ -4,12 +4,16 @@ use std::{fmt::Debug, io::Write, path::PathBuf};
 
 use clap::Parser;
 use log::{debug, trace};
-use mlx5cmd::{cmdif::CmdIf, commands::{EnableHCA, InitHCA, ManagePages, ManagePagesOpMod, QueryHCACap, QueryISSI, QueryPages, QueryPagesOpMod, SetISSI}};
+use mlx5cmd::{
+    cmdif::CmdIf,
+    commands::{
+        EnableHCA, InitHCA, ManagePages, ManagePagesOpMod, QueryHCACap, QueryISSI, QueryPages,
+        QueryPagesOpMod, SetISSI,
+    },
+};
 use pci_driver::regions::PciRegion;
 
-use mlx5cmd::{
-    error::Result, cmdif::vfio::VfioCmdIf
-};
+use mlx5cmd::{cmdif::vfio::VfioCmdIf, error::Result};
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -56,7 +60,6 @@ fn main() -> Result<()> {
         op_mod: QueryPagesOpMod::InitPages,
     })?;
 
-
     let mut pages = vec![];
     debug!("Allocating {} init pages", query_init_pages.num_pages);
     for _ in 0..query_init_pages.num_pages {
@@ -73,7 +76,10 @@ fn main() -> Result<()> {
 
     cmdif.do_command(InitHCA(()))?;
 
-    let mut output = std::fs::OpenOptions::new().write(true).create(true).open(args.output)?;
+    let mut output = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(args.output)?;
     for page in managed_pages {
         let mut content = [0u8; 4096];
         let address = page.as_ptr().unwrap() as u64;

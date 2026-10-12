@@ -9,9 +9,7 @@ use log::debug;
 use mlx5cmd::cmdif::CmdIf;
 use mlx5cmd::commands::ExecShellcode64;
 
-use mlx5cmd::{
-    error::Result, cmdif::vfio::VfioCmdIf
-};
+use mlx5cmd::{cmdif::vfio::VfioCmdIf, error::Result};
 
 use irisc_asm::assemble;
 
@@ -45,9 +43,12 @@ fn main() -> Result<()> {
 
     let (code, labels) = assemble(0x00000000u32, READMEM_SHELLCODE).unwrap();
 
-    let mut output = std::fs::OpenOptions::new().write(true).create(true).open(args.output)?;
+    let mut output = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(args.output)?;
 
-    for address in (args.base..args.base+args.length).step_by(8) {
+    for address in (args.base..args.base + args.length).step_by(8) {
         let mut shellcode = [0u8; 0xa0];
         shellcode[..code.len()].copy_from_slice(&code);
 

@@ -1,8 +1,7 @@
-use deku::{ctx::Endian, DekuRead, DekuWrite};
 use deku::prelude::*;
+use deku::{ctx::Endian, DekuRead, DekuWrite};
 
 use super::Register;
-
 
 #[derive(Debug, Default, PartialEq, DekuRead, DekuWrite)]
 #[deku(endian = "ctx_endian", ctx = "ctx_endian: Endian")]
