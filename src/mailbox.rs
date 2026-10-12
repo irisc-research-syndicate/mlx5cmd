@@ -7,7 +7,7 @@ use pci_driver::{
 
 use crate::error::Result;
 
-const MAILBOX_BLOCK_SIZE: usize = 0x200;
+pub(crate) const MAILBOX_BLOCK_SIZE: usize = 0x200;
 const MAILBOX_STRIDE: u64 = 0x400;
 const CTRL_SIGNATURE_START: usize = 0x1c0;
 

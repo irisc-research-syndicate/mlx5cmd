@@ -7,7 +7,7 @@ use crate::{
     cqe::CQE,
     error::{Error, Result},
     init::InitSegment,
-    mailbox::MailboxAllocator,
+    mailbox::{MailboxAllocator, MAILBOX_BLOCK_SIZE},
 };
 use log::{debug, trace};
 use pci_driver::{
@@ -31,7 +31,7 @@ pub struct VfioCmdIf {
 
 const DMA_PAGES: usize = 32768;
 
-const CMD_TYPE_PCIE: u8 = 0x07;
+const CMD_TYPE_PCI_XPORT: u8 = 0x07;
 const CQE_INLINE_INPUT: u64 = 0x10;
 const CQE_INLINE_OUTPUT: u64 = 0x20;
 const CQE_INLINE_LEN: usize = 0x10;
@@ -154,7 +154,7 @@ impl CmdIf for VfioCmdIf {
         let mailbox_region = self.dma_allocator.alloc(256).ok_or(Error::OutOfMemory)?;
         let mut mailbox_allocator = MailboxAllocator::new((&*mailbox_region).subregion(..));
 
-        cmd.cmd_type().write(CMD_TYPE_PCIE)?;
+        cmd.cmd_type().write(CMD_TYPE_PCI_XPORT)?;
 
         cmd.set_input_mb(0)?;
         cmd.set_output_mb(0)?;
@@ -201,7 +201,7 @@ impl CmdIf for VfioCmdIf {
             output.push(cmd.read_u8(CQE_INLINE_OUTPUT + i as u64)?)
         }
         for out_mb in out_mb_vec.iter() {
-            let mut chunk = vec![0u8; 0x200];
+            let mut chunk = vec![0u8; MAILBOX_BLOCK_SIZE];
             out_mb.read_bytes(0, &mut chunk)?;
             output.extend_from_slice(&chunk[..]);
         }
