@@ -3,7 +3,14 @@ use irisc_asm::assemble;
 
 pub mod vfio;
 
-use crate::{commands::{access_register::{AccessRegister, AccessRegisterOpMod}, BaseOutputStatus, Command, CommandErrorStatus, ExecShellcode64}, error::{Error, Result}, registers::Register};
+use crate::{
+    commands::{
+        access_register::{AccessRegister, AccessRegisterOpMod},
+        BaseOutputStatus, Command, CommandErrorStatus, ExecShellcode64,
+    },
+    error::{Error, Result},
+    registers::Register,
+};
 
 pub trait CmdIf {
     fn exec_command(&self, input: &[u8], outlen: u32) -> Result<Vec<u8>>;
@@ -25,7 +32,11 @@ pub trait CmdIf {
         Ok(res)
     }
 
-   fn read_register<Reg: Register + core::fmt::Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
+    fn read_register<Reg: Register + core::fmt::Debug>(
+        &self,
+        reg: Reg,
+        argument: u32,
+    ) -> Result<Reg> {
         log::debug!("Reading register {reg:x?}");
         let resp = self.do_command(AccessRegister {
             op_mod: AccessRegisterOpMod::Read,
@@ -38,7 +49,11 @@ pub trait CmdIf {
         Ok(reg)
     }
 
-   fn write_register<Reg: Register + core::fmt::Debug>(&self, reg: Reg, argument: u32) -> Result<Reg> {
+    fn write_register<Reg: Register + core::fmt::Debug>(
+        &self,
+        reg: Reg,
+        argument: u32,
+    ) -> Result<Reg> {
         log::debug!("Writing register {reg:x?}");
         let resp = self.do_command(AccessRegister {
             op_mod: AccessRegisterOpMod::Write,
@@ -51,14 +66,23 @@ pub trait CmdIf {
         Ok(reg)
     }
 
-    fn run_shellcode(&self, shellcode: &str) -> anyhow::Result<[u64;3]> {
-        let (code, _labels) = assemble(0, shellcode)?;
+    fn run_shellcode(&self, shellcode: &str) -> Result<[u64; 3]> {
+        let (code, _labels) = assemble(0, shellcode).map_err(|e| Error::Asm(e.to_string()))?;
         let mut shellcode = [0u8; 0xa0];
+        if code.len() > shellcode.len() {
+            return Err(Error::Asm(format!(
+                "shellcode too long: {} > {}",
+                code.len(),
+                shellcode.len()
+            )));
+        }
         shellcode[..code.len()].copy_from_slice(&code);
-        Ok(self.do_command(ExecShellcode64{
-            op_mod: 0,
-            args: [0, 0, 0],
-            shellcode,
-        })?.results)
+        Ok(self
+            .do_command(ExecShellcode64 {
+                op_mod: 0,
+                args: [0, 0, 0],
+                shellcode,
+            })?
+            .results)
     }
 }

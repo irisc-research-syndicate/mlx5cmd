@@ -30,5 +30,8 @@ pub enum Error {
 
     #[error("Invalid MTCR address space")]
     InvalidAddressSpace,
+
+    #[error("assembler error: {0}")]
+    Asm(String),
 }
 pub type Result<T> = std::result::Result<T, Error>;
